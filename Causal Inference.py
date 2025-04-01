@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.10.16"
+__generated_with = "0.11.26"
 app = marimo.App(width="full", auto_download=["ipynb"])
 
 
@@ -1946,11 +1946,7 @@ def _(mo):
 
     # Display all method descriptions together
     mo.vstack([ipw_description, matching_description, ps_stratification_description])
-    return (
-        ipw_description,
-        matching_description,
-        ps_stratification_description,
-    )
+    return ipw_description, matching_description, ps_stratification_description
 
 
 @app.cell(hide_code=True)
@@ -2535,7 +2531,7 @@ def _(mo):
            \[ \hat{\tau}(x) = \hat{\mu}(x, 1) - \hat{\mu}(x, 0) \]
 
         **Advantages**: Simple to implement, requires only one model
-        
+
         **Limitations**: May underestimate treatment effects if treatment assignment is highly imbalanced
         """),
         kind="info"
@@ -2555,7 +2551,7 @@ def _(mo):
            \[ \hat{\tau}(x) = \hat{\mu}_1(x) - \hat{\mu}_0(x) \]
 
         **Advantages**: Can capture heterogeneous response surfaces, doesn't impose shared structure
-        
+
         **Limitations**: May suffer from high variance in regions with few samples from either group
         """),
         kind="warn"
@@ -2584,7 +2580,7 @@ def _(mo):
            where g(x) can be the propensity score.
 
         **Advantages**: Performs well with heterogeneous treatment effects and imbalanced treatment groups
-        
+
         **Limitations**: More complex, requires estimating propensity scores
         """),
         kind="success"
@@ -2597,17 +2593,1126 @@ def _(mo):
         t_learner_desc,
         x_learner_desc
     ])
-    return (s_learner_desc, t_learner_desc, x_learner_desc)
+    return s_learner_desc, t_learner_desc, x_learner_desc
 
 
-@app.cell
-def _():
-    # Machine learning methods
+@app.cell(hide_code=True)
+def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, np, pd, plt):
+    def _():
+        # Import required ML libraries
+        from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.metrics import mean_squared_error
+
+        # S-Learner implementation
+        def s_learner(X, T, Y, X_test=None, model=None):
+            """
+            Estimate treatment effects using S-Learner
+
+            Parameters:
+            -----------
+            X : DataFrame of covariates
+            T : Series of treatment assignments
+            Y : Series of outcomes
+            X_test : DataFrame of test covariates or None
+            model : Fitted sklearn model or None
+
+            Returns:
+            --------
+            ate : Estimated average treatment effect
+            cate : Estimated conditional average treatment effects
+            model : Fitted model
+            """
+            # Default model
+            if model is None:
+                model = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)
+
+            # Create combined dataset
+            X_combined = X.copy()
+            X_combined['treatment'] = T
+
+            # Fit the model
+            model.fit(X_combined, Y)
+
+            # Predict on test set if provided, otherwise on training set
+            if X_test is not None:
+                X_pred = X_test
+            else:
+                X_pred = X
+
+            # Create counterfactual datasets
+            X_pred_1 = X_pred.copy()
+            X_pred_1['treatment'] = 1
+
+            X_pred_0 = X_pred.copy()
+            X_pred_0['treatment'] = 0
+
+            # Predict potential outcomes
+            y_pred_1 = model.predict(X_pred_1)
+            y_pred_0 = model.predict(X_pred_0)
+
+            # Calculate treatment effects
+            cate = y_pred_1 - y_pred_0
+            ate = cate.mean()
+
+            return ate, cate, model
+
+        # T-Learner implementation
+        def t_learner(X, T, Y, X_test=None, model_t=None, model_c=None):
+            """
+            Estimate treatment effects using T-Learner
+
+            Parameters:
+            -----------
+            X : DataFrame of covariates
+            T : Series of treatment assignments
+            Y : Series of outcomes
+            X_test : DataFrame of test covariates or None
+            model_t : Sklearn model for treated group or None
+            model_c : Sklearn model for control group or None
+
+            Returns:
+            --------
+            ate : Estimated average treatment effect
+            cate : Estimated conditional average treatment effects
+            models : Tuple of (treatment_model, control_model)
+            """
+            # Default models
+            if model_t is None:
+                model_t = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)
+            if model_c is None:
+                model_c = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=43)
+
+            # Split data into treated and control groups
+            X_t = X[T == 1]
+            Y_t = Y[T == 1]
+            X_c = X[T == 0]
+            Y_c = Y[T == 0]
+
+            # Fit models
+            model_t.fit(X_t, Y_t)
+            model_c.fit(X_c, Y_c)
+
+            # Predict on test set if provided, otherwise on training set
+            if X_test is not None:
+                X_pred = X_test
+            else:
+                X_pred = X
+
+            # Predict potential outcomes
+            y_pred_1 = model_t.predict(X_pred)
+            y_pred_0 = model_c.predict(X_pred)
+
+            # Calculate treatment effects
+            cate = y_pred_1 - y_pred_0
+            ate = cate.mean()
+
+            return ate, cate, (model_t, model_c)
+
+        # X-Learner implementation
+        def x_learner(X, T, Y, X_test=None, models_t=None, models_c=None, propensity_model=None):
+            """
+            Estimate treatment effects using X-Learner
+
+            Parameters:
+            -----------
+            X : DataFrame of covariates
+            T : Series of treatment assignments
+            Y : Series of outcomes
+            X_test : DataFrame of test covariates or None
+            models_t : List of two Sklearn models for treated group or None
+            models_c : List of two Sklearn models for control group or None
+            propensity_model : Sklearn classifier for propensity scores or None
+
+            Returns:
+            --------
+            ate : Estimated average treatment effect
+            cate : Estimated conditional average treatment effects
+            models : Tuple of (models_t, models_c, propensity_model)
+            """
+            # Default models
+            if models_t is None:
+                models_t = [
+                    RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+                    RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=43)
+                ]
+            if models_c is None:
+                models_c = [
+                    RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=44),
+                    RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=45)
+                ]
+            if propensity_model is None:
+                propensity_model = LogisticRegression(max_iter=1000)
+
+            # Split data into treated and control groups
+            X_t = X[T == 1]
+            Y_t = Y[T == 1]
+            X_c = X[T == 0]
+            Y_c = Y[T == 0]
+
+            # Step 1: Estimate the response surfaces
+            model_t1, model_c1 = models_t[0], models_c[0]
+            model_t1.fit(X_t, Y_t)
+            model_c1.fit(X_c, Y_c)
+
+            # Predict responses for all units
+            mu_t = model_t1.predict(X)
+            mu_c = model_c1.predict(X)
+
+            # Step 2: Compute the imputed treatment effects
+            D_t = Y_t.values - model_c1.predict(X_t)  # Imputed effect for treated units
+            D_c = model_t1.predict(X_c) - Y_c.values  # Imputed effect for control units
+
+            # Step 3: Estimate the CATE functions
+            model_t2, model_c2 = models_t[1], models_c[1]
+            model_t2.fit(X_t, D_t)
+            model_c2.fit(X_c, D_c)
+
+            # Step 4: Combine the CATE functions using propensity scores
+            propensity_model.fit(X, T)
+            g = propensity_model.predict_proba(X)[:, 1]  # Propensity scores
+
+            # Predict on test set if provided, otherwise on training set
+            if X_test is not None:
+                X_pred = X_test
+                g_pred = propensity_model.predict_proba(X_pred)[:, 1]
+            else:
+                X_pred = X
+                g_pred = g
+
+            # Predict treatment effects
+            tau_t = model_t2.predict(X_pred)
+            tau_c = model_c2.predict(X_pred)
+
+            # Weighted average of treatment effects
+            cate = g_pred * tau_c + (1 - g_pred) * tau_t
+            ate = cate.mean()
+
+            return ate, cate, (models_t, models_c, propensity_model)
+
+        # Compare meta-learners
+        np.random.seed(42)  # Set seed for reproducibility
+
+        # Initialize results list
+        meta_learner_results = []
+
+        # True ATE for comparison
+        true_ate = (Y1_train - Y0_train).mean()
+
+        # S-Learner with different base models
+        for model_name, model in [
+            ('Random Forest', RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)),
+            ('Gradient Boosting', GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=42))
+        ]:
+            # Train S-Learner
+            s_ate, s_cate, _ = s_learner(X_train_scaled, T_train, Y_train, model=model)
+
+            # Save results
+            meta_learner_results.append({
+                'Method': f'S-Learner ({model_name})',
+                'ATE': s_ate,
+                'Bias': s_ate - true_ate,
+                'Abs Bias': abs(s_ate - true_ate)
+            })
+
+        # T-Learner with different base models
+        for model_name, model_t, model_c in [
+            ('Random Forest', 
+             RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+             RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=43)),
+            ('Gradient Boosting', 
+             GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=42),
+             GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=43))
+        ]:
+            # Train T-Learner
+            t_ate, t_cate, _ = t_learner(X_train_scaled, T_train, Y_train, model_t=model_t, model_c=model_c)
+
+            # Save results
+            meta_learner_results.append({
+                'Method': f'T-Learner ({model_name})',
+                'ATE': t_ate,
+                'Bias': t_ate - true_ate,
+                'Abs Bias': abs(t_ate - true_ate)
+            })
+
+        # X-Learner with different base models
+        for model_name, models_t, models_c, prop_model in [
+            ('Random Forest', 
+             [RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+              RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=43)],
+             [RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=44),
+              RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=45)],
+             LogisticRegression(max_iter=1000)),
+            ('Gradient Boosting', 
+             [GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=42),
+              GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=43)],
+             [GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=44),
+              GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=45)],
+             LogisticRegression(max_iter=1000))
+        ]:
+            # Train X-Learner
+            x_ate, x_cate, _ = x_learner(X_train_scaled, T_train, Y_train, 
+                                        models_t=models_t, models_c=models_c, 
+                                        propensity_model=prop_model)
+
+            # Save results
+            meta_learner_results.append({
+                'Method': f'X-Learner ({model_name})',
+                'ATE': x_ate,
+                'Bias': x_ate - true_ate,
+                'Abs Bias': abs(x_ate - true_ate)
+            })
+
+        # Convert to DataFrame and sort by absolute bias
+        meta_learner_df = pd.DataFrame(meta_learner_results)
+        meta_learner_df = meta_learner_df.sort_values('Abs Bias')
+
+        # Compare meta-learners - show results
+        header = mo.md("#### Meta-Learner Results")
+        table = mo.ui.table(meta_learner_df)
+
+        # Visualize comparison
+        fig, ax = plt.subplots(figsize=(12, 8))
+        ax.barh(y=meta_learner_df['Method'], width=meta_learner_df['ATE'], color='skyblue')
+        ax.axvline(x=true_ate, color='red', linestyle='--', label=f'True ATE = {true_ate:.4f}')
+        ax.set_title('Comparison of ATE Estimates from Meta-Learners')
+        ax.set_xlabel('ATE Estimate')
+        ax.set_ylabel('Method')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        plt.tight_layout()
+
+        # Create interactive plot
+        plot = mo.mpl.interactive(fig)
+
+        # Select the best meta-learner method
+        best_ml_idx = meta_learner_df['Abs Bias'].idxmin()
+        best_ml = meta_learner_df.loc[best_ml_idx]
+
+        # Create summary of best method
+        best_method_summary = mo.callout(
+            mo.md(f"""
+            **Best Meta-Learner Method:**
+
+            - **Method**: {best_ml['Method']}
+            - **ATE Estimate**: {best_ml['ATE']:.4f}
+            - **True ATE**: {true_ate:.4f}
+            - **Bias**: {best_ml['Bias']:.4f}
+
+            This analysis shows that meta-learners can provide accurate estimates of causal effects by leveraging machine learning algorithms.
+            """),
+            kind="success"
+        )
+
+        # Plot treatment effect heterogeneity
+        # Get CATE estimates from X-Learner with Random Forest
+        _, x_cate, _ = x_learner(
+            X_train_scaled, T_train, Y_train,
+            models_t=[RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+                     RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=43)],
+            models_c=[RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=44),
+                     RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=45)],
+            propensity_model=LogisticRegression(max_iter=1000)
+        )
+
+        # Plot CATE distribution
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        ax2.hist(x_cate, bins=30, color='skyblue', alpha=0.7)
+        ax2.axvline(x=x_cate.mean(), color='red', linestyle='--', 
+                   label=f'Mean CATE = {x_cate.mean():.4f}')
+        ax2.axvline(x=true_ate, color='green', linestyle=':', 
+                   label=f'True ATE = {true_ate:.4f}')
+        ax2.set_title('Distribution of Conditional Average Treatment Effects (CATE)')
+        ax2.set_xlabel('CATE')
+        ax2.set_ylabel('Frequency')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        cate_plot = mo.mpl.interactive(fig2)
+        cate_explanation = mo.md("""**Treatment Effect Heterogeneity**: The distribution above shows how treatment effects vary across different individuals. This variation suggests that the intervention may be more effective for some subgroups than others.""")
+
+        # Combine all elements in the output
+        mo.output.replace(mo.vstack([
+            header,
+            table,
+            plot,
+            best_method_summary,
+            mo.md("#### Treatment Effect Heterogeneity"),
+            cate_plot,
+            cate_explanation
+        ]))
+    _()
     return
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        subsection_header = mo.md("""#### 6.3.2 Doubly Robust Methods {#doubly-robust}
+
+        Doubly robust methods combine outcome modeling and propensity score approaches to provide protection against misspecification of either model. This "double robustness" property makes these methods particularly attractive for causal inference in complex settings.
+        """)
+        mo.output.replace(subsection_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Create descriptions of doubly robust methods
+    aipw_desc = mo.callout(
+        mo.md(r"""
+        #### Augmented Inverse Probability Weighting (AIPW)
+
+        AIPW combines outcome regression and IPW by using both models to create a doubly robust estimator:
+
+        The AIPW estimator can be written as:
+
+        \[ \hat{\tau}_{AIPW} = \frac{1}{n} \sum_{i=1}^n \left( \hat{\mu}_1(X_i) - \hat{\mu}_0(X_i) + \frac{T_i(Y_i - \hat{\mu}_1(X_i))}{\hat{e}(X_i)} - \frac{(1-T_i)(Y_i - \hat{\mu}_0(X_i))}{1-\hat{e}(X_i)} \right) \]
+
+        where:
+        - \(\hat{\mu}_1(X_i)\) and \(\hat{\mu}_0(X_i)\) are outcome models for treated and control
+        - \(\hat{e}(X_i)\) is the propensity score model
+
+        **Key property**: Consistent if *either* the outcome model *or* the propensity score model is correctly specified (not necessarily both)
+
+        **Advantages**: More robust to model misspecification, often lower variance than IPW
+        """),
+        kind="info"
+    )
+
+    dml_desc = mo.callout(
+        mo.md(r"""
+        #### Double Machine Learning (DML)
+
+        DML addresses issues of regularization bias and overfitting in high-dimensional settings:
+
+        1. **Cross-fitting approach**:
+           - Split the data into K folds
+           - For each fold, fit models on the other K-1 folds and predict on the held-out fold
+           - This reduces the impact of overfitting
+
+        2. **Orthogonalization**:
+           - Remove the dependence between treatment and covariates
+           - Remove the dependence between outcome and covariates
+           - Study the residual relationship
+
+        DML can be implemented as:
+
+        \[ \hat{\tau}_{DML} = \frac{\frac{1}{n}\sum_{i=1}^n (T_i - \hat{e}(X_i))(Y_i - \hat{m}(X_i))}{\frac{1}{n}\sum_{i=1}^n (T_i - \hat{e}(X_i))^2} \]
+
+        where \(\hat{m}(X_i)\) is a model for the outcome and \(\hat{e}(X_i)\) is the propensity score model.
+
+        **Advantages**: Handles high-dimensional settings well, allows complex ML models, reduces regularization bias
+        """),
+        kind="warn"
+    )
+
+    # Stack all descriptions
+    mo.vstack([
+        mo.md("Doubly robust methods offer protection against model misspecification by combining outcome modeling and propensity score approaches:"),
+        aipw_desc,
+        dml_desc
+    ])
+    return aipw_desc, dml_desc
+
+
+@app.cell(hide_code=True)
+def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, np, pd, plt):
+    def _():
+        # Import required libraries
+        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, GradientBoostingRegressor
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.model_selection import KFold
+
+        # Implement Augmented Inverse Probability Weighting (AIPW)
+        def doubly_robust_aipw(X, T, Y, outcome_model=None, propensity_model=None):
+            """
+            Estimate ATE using Augmented Inverse Probability Weighting (AIPW)
+
+            Parameters:
+            -----------
+            X : DataFrame of covariates
+            T : Series of treatment assignments
+            Y : Series of outcomes
+            outcome_model : sklearn regressor or None
+            propensity_model : sklearn classifier or None
+
+            Returns:
+            --------
+            ate : Estimated average treatment effect
+            """
+            from sklearn.base import clone
+
+            # Default models
+            if outcome_model is None:
+                outcome_model = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)
+            if propensity_model is None:
+                propensity_model = LogisticRegression(max_iter=1000)
+
+            # Split data by treatment group
+            X_t = X[T == 1]
+            Y_t = Y[T == 1]
+            X_c = X[T == 0]
+            Y_c = Y[T == 0]
+
+            # Fit outcome models for each treatment group
+            model_t = clone(outcome_model)
+            model_c = clone(outcome_model)
+            model_t.fit(X_t, Y_t)
+            model_c.fit(X_c, Y_c)
+
+            # Predict potential outcomes for all units
+            mu_1 = model_t.predict(X)
+            mu_0 = model_c.predict(X)
+
+            # Fit propensity score model
+            ps_model = clone(propensity_model)
+            ps_model.fit(X, T)
+            ps = ps_model.predict_proba(X)[:, 1]
+
+            # Handle extreme propensity scores
+            eps = 1e-12
+            ps = np.maximum(eps, np.minimum(1 - eps, ps))
+
+            # Calculate AIPW estimator
+            aipw_0 = mu_0 + (1 - T) * (Y - mu_0) / (1 - ps)
+            aipw_1 = mu_1 + T * (Y - mu_1) / ps
+
+            # Calculate ATE
+            ate = (aipw_1 - aipw_0).mean()
+
+            return ate
+
+        # Implement Double Machine Learning (DML)
+        def double_machine_learning(X, T, Y, outcome_model=None, propensity_model=None, n_splits=5):
+            """
+            Estimate ATE using Double Machine Learning with cross-fitting
+
+            Parameters:
+            -----------
+            X : DataFrame of covariates
+            T : Series of treatment assignments
+            Y : Series of outcomes
+            outcome_model : sklearn regressor or None
+            propensity_model : sklearn classifier or None
+            n_splits : int, number of folds for cross-fitting
+
+            Returns:
+            --------
+            ate : Estimated average treatment effect
+            """
+            from sklearn.base import clone
+
+            # Default models
+            if outcome_model is None:
+                outcome_model = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)
+            if propensity_model is None:
+                propensity_model = LogisticRegression(max_iter=1000)
+
+            # Initialize arrays for predictions
+            n = len(Y)
+            Y_hat = np.zeros(n)
+            T_hat = np.zeros(n)
+
+            # Set up cross-fitting
+            kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+            # Perform cross-fitting
+            for train_idx, test_idx in kf.split(X):
+                # Get train and test data
+                X_train = X.iloc[train_idx]
+                X_test = X.iloc[test_idx]
+                T_train_fold = T.iloc[train_idx]
+                T_test = T.iloc[test_idx]
+                Y_train_fold = Y.iloc[train_idx]
+
+                # Fit and predict with outcome model
+                m_model = clone(outcome_model)
+                m_model.fit(X_train, Y_train_fold)
+                Y_hat[test_idx] = m_model.predict(X_test)
+
+                # Fit and predict with propensity model
+                e_model = clone(propensity_model)
+                e_model.fit(X_train, T_train_fold)
+                T_hat[test_idx] = e_model.predict_proba(X_test)[:, 1]
+
+            # Calculate residuals
+            Y_resid = Y - Y_hat
+            T_resid = T - T_hat
+
+            # Estimate treatment effect using DML formula
+            numerator = np.mean(T_resid * Y_resid)
+            denominator = np.mean(T_resid * T)
+
+            if denominator == 0:
+                raise ValueError("Denominator in DML estimator is zero")
+
+            ate = numerator / denominator
+
+            return ate
+
+        # True ATE for reference
+        true_ate = (Y1_train - Y0_train).mean()
+
+        # Compare doubly robust methods
+        dr_results = []
+
+        # Test different model combinations for AIPW
+        for method_name, outcome_model, propensity_model in [
+            ('AIPW (RF, Logistic)', 
+             RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+             LogisticRegression(max_iter=1000)),
+            ('AIPW (GB, Logistic)', 
+             GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=42),
+             LogisticRegression(max_iter=1000)),
+            ('AIPW (RF, RF)', 
+             RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+             RandomForestClassifier(n_estimators=100, min_samples_leaf=5, random_state=42))
+        ]:
+            # Estimate ATE with AIPW
+            try:
+                aipw_ate = doubly_robust_aipw(X_train_scaled, T_train, Y_train, 
+                                           outcome_model=outcome_model,
+                                           propensity_model=propensity_model)
+
+                # Store results
+                dr_results.append({
+                    'Method': method_name,
+                    'ATE': aipw_ate,
+                    'Bias': aipw_ate - true_ate,
+                    'Abs Bias': abs(aipw_ate - true_ate),
+                    'Type': 'AIPW'
+                })
+            except Exception as e:
+                print(f"Error with {method_name}: {e}")
+
+        # Test different model combinations for DML
+        for method_name, outcome_model, propensity_model in [
+            ('DML (RF, Logistic)', 
+             RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+             LogisticRegression(max_iter=1000)),
+            ('DML (GB, Logistic)', 
+             GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=42),
+             LogisticRegression(max_iter=1000)),
+            ('DML (RF, RF)', 
+             RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42),
+             RandomForestClassifier(n_estimators=100, min_samples_leaf=5, random_state=42))
+        ]:
+            # Estimate ATE with DML
+            try:
+                dml_ate = double_machine_learning(X_train_scaled, T_train, Y_train, 
+                                               outcome_model=outcome_model,
+                                               propensity_model=propensity_model)
+
+                # Store results
+                dr_results.append({
+                    'Method': method_name,
+                    'ATE': dml_ate,
+                    'Bias': dml_ate - true_ate,
+                    'Abs Bias': abs(dml_ate - true_ate),
+                    'Type': 'DML'
+                })
+            except Exception as e:
+                print(f"Error with {method_name}: {e}")
+
+        # Convert to DataFrame and sort by absolute bias
+        dr_results_df = pd.DataFrame(dr_results)
+        dr_results_df = dr_results_df.sort_values('Abs Bias')
+
+        # Compare doubly robust methods - show results
+        header = mo.md("#### Doubly Robust Method Results")
+        table = mo.ui.table(dr_results_df)
+
+        # Visualize comparison
+        fig, ax = plt.subplots(figsize=(12, 8))
+        ax.barh(y=dr_results_df['Method'], width=dr_results_df['ATE'], color='skyblue')
+        ax.axvline(x=true_ate, color='red', linestyle='--', label=f'True ATE = {true_ate:.4f}')
+        ax.set_title('Comparison of ATE Estimates from Doubly Robust Methods')
+        ax.set_xlabel('ATE Estimate')
+        ax.set_ylabel('Method')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        plt.tight_layout()
+
+        # Create interactive plot
+        plot = mo.mpl.interactive(fig)
+
+        # Select the best doubly robust method
+        if not dr_results_df.empty:
+            best_dr_idx = dr_results_df['Abs Bias'].idxmin()
+            best_dr = dr_results_df.loc[best_dr_idx]
+
+            # Create summary of best method
+            best_method_summary = mo.callout(
+                mo.md(f"""
+                **Best Doubly Robust Method:**
+
+                - **Method**: {best_dr['Method']}
+                - **ATE Estimate**: {best_dr['ATE']:.4f}
+                - **True ATE**: {true_ate:.4f}
+                - **Bias**: {best_dr['Bias']:.4f}
+
+                Doubly robust methods provide protection against model misspecification, making them more robust for causal inference in complex settings.
+                """),
+                kind="success"
+            )
+
+            # Comparison of AIPW vs DML
+            method_comparison = mo.md("""
+            **AIPW vs DML Comparison**:
+
+            - **AIPW** directly augments IPW with an outcome model correction term, providing a straightforward implementation of double robustness
+            - **DML** uses cross-fitting to address regularization bias, making it particularly well-suited for high-dimensional settings
+
+            Both methods leverage the strengths of outcome modeling and propensity score approaches, providing more reliable causal estimates than either approach alone.
+            """)
+
+            # Combine all elements in the output
+            mo.output.replace(mo.vstack([
+                header,
+                table,
+                plot,
+                best_method_summary,
+                method_comparison
+            ]))
+        else:
+            mo.output.replace(mo.md("**Error:** No valid results from doubly robust methods."))
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        subsection_header = mo.md("""#### 6.3.3 Causal Forests {#causal-forests}
+
+        Causal forests are a powerful extension of random forests specifically designed to estimate heterogeneous treatment effects. They are particularly useful for understanding how treatment effects vary across different subgroups and for identifying important features that modify treatment effects.
+        """)
+        mo.output.replace(subsection_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Create description of causal forests
+    causal_forest_desc = mo.callout(
+        mo.md(r"""
+        #### Causal Forests
+
+        Causal forests extend random forests to directly estimate heterogeneous treatment effects. The key ideas include:
+
+        1. **Honest trees**: Split the sample into a training set (used to determine splits) and an estimation set (used to estimate treatment effects within leaves)
+
+        2. **Orthogonalization**: Remove the effect of confounders by residualizing the outcome and treatment
+
+        3. **Adaptive sample splitting**: Focus on regions with high treatment effect heterogeneity
+
+        The algorithm builds many trees and averages the results to obtain the Conditional Average Treatment Effect (CATE) function:
+
+        \[ \hat{\tau}(x) = E[Y(1) - Y(0) | X = x] \]
+
+        **Key advantages**:
+        - Directly targets heterogeneous treatment effects
+        - Provides measures of variable importance for effect modification
+        - Performs well with high-dimensional covariates
+        - Offers honest confidence intervals
+
+        **Implementation**: Causal forests are available in packages like `econml` (Python) and `grf` (R)
+        """),
+        kind="info"
+    )
+
+    mo.vstack([
+        causal_forest_desc
+    ])
+    return (causal_forest_desc,)
+
+
+@app.cell(hide_code=True)
+def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, pd, plt):
+    def _():
+
+        try:
+            from econml.dml import CausalForestDML
+            from sklearn.linear_model import LassoCV, LogisticRegression
+
+            # Implement Causal Forest
+            def causal_forest(X, T, Y, n_estimators=100, min_samples_leaf=5):
+                """
+                Estimate ATE and CATE using Causal Forest
+
+                Parameters:
+                -----------
+                X : DataFrame of covariates
+                T : Series of treatment assignments
+                Y : Series of outcomes
+                n_estimators : int, Number of trees
+                min_samples_leaf : int, Minimum samples in leaf
+
+                Returns:
+                --------
+                ate : Estimated average treatment effect
+                cate : Estimated conditional average treatment effects
+                model : Fitted causal forest model
+                """
+                # Initialize model
+                cf = CausalForestDML(
+                    model_y=LassoCV(cv=3),
+                    model_t=LogisticRegression(max_iter=1000),
+                    n_estimators=n_estimators,
+                    min_samples_leaf=min_samples_leaf,
+                    discrete_treatment=True,
+                    random_state=42
+                )
+
+                # Fit model
+                cf.fit(Y, T, X=X)
+
+                # Predict CATE
+                cate = cf.effect(X)
+
+                # Calculate ATE
+                ate = cate.mean()
+
+                return ate, cate, cf
+
+            # Apply causal forest to our data
+            cf_ate, cf_cate, cf_model = causal_forest(X_train_scaled, T_train, Y_train)
+
+            # True ATE for reference
+            true_ate = (Y1_train - Y0_train).mean()
+
+            # Results summary
+            results_summary = mo.callout(
+                mo.md(f"""
+                **Causal Forest Results:**
+
+                - **Estimated ATE**: {cf_ate:.4f}
+                - **True ATE**: {true_ate:.4f}
+                - **Bias**: {cf_ate - true_ate:.4f}
+                - **Absolute Bias**: {abs(cf_ate - true_ate):.4f}
+                """),
+                kind="info"
+            )
+
+            # Visualize CATE distribution
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.hist(cf_cate, bins=30, color='skyblue', alpha=0.7)
+            ax.axvline(x=cf_cate.mean(), color='red', linestyle='--', 
+                       label=f'Mean CATE = {cf_cate.mean():.4f}')
+            ax.axvline(x=true_ate, color='green', linestyle=':', 
+                      label=f'True ATE = {true_ate:.4f}')
+            ax.set_title('Distribution of Causal Forest CATE Estimates')
+            ax.set_xlabel('CATE')
+            ax.set_ylabel('Frequency')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+
+            cate_plot = mo.mpl.interactive(fig)
+
+            # Feature importance if available
+            if hasattr(cf_model, 'feature_importances_'):
+                # Get feature importance
+                feature_imp = pd.DataFrame({
+                    'Feature': X_train_scaled.columns,
+                    'Importance': cf_model.feature_importances_
+                }).sort_values('Importance', ascending=False)
+
+                # Plot feature importance
+                fig2, ax2 = plt.subplots(figsize=(10, 8))
+                ax2.barh(y=feature_imp['Feature'].head(10), width=feature_imp['Importance'].head(10))
+                ax2.set_title('Top 10 Features for Treatment Effect Heterogeneity')
+                ax2.set_xlabel('Importance')
+                ax2.invert_yaxis()
+                ax2.grid(True, alpha=0.3)
+                plt.tight_layout()
+
+                feature_plot = mo.mpl.interactive(fig2)
+
+                # Combine all elements in the output
+                mo.output.replace(mo.vstack([
+                    mo.md("#### Causal Forest Results"),
+                    results_summary,
+                    mo.md("#### Treatment Effect Heterogeneity"),
+                    cate_plot,
+                    mo.md("#### Feature Importance for Effect Modification"),
+                    feature_plot,
+                    mo.md("""
+                    The feature importance plot shows which variables contribute most to treatment effect heterogeneity. 
+                    These are the features that most strongly modify the effect of treatment, and may be useful for 
+                    targeting interventions to those who would benefit most.
+                    """)
+                ]))
+            else:
+                # Output without feature importance
+                mo.output.replace(mo.vstack([
+                    mo.md("#### Causal Forest Results"),
+                    results_summary,
+                    mo.md("#### Treatment Effect Heterogeneity"),
+                    cate_plot,
+                    mo.md("""
+                    Causal forests directly estimate treatment effect heterogeneity, allowing us to see how 
+                    treatment effects vary across different individuals or subgroups. This variation suggests 
+                    that the intervention may be more effective for some subgroups than others.
+                    """)
+                ]))
+
+        except ImportError:
+            # If econml is not available, provide instructions
+            mo.output.replace(mo.vstack([
+                mo.md("#### Causal Forest Implementation"),
+                mo.callout(
+                    mo.md("""
+                    **EconML package not available**
+
+                    Causal Forests require the EconML package, which is not currently installed.
+
+                    To install EconML and implement Causal Forests, you can run:
+                    ```
+                    pip install econml
+                    ```
+
+                    Causal forests are powerful for estimating heterogeneous treatment effects and 
+                    identifying important features that modify treatment effects.
+                    """),
+                    kind="warn"
+                )
+            ]))
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        subsection_header = mo.md("""#### 6.3.4 Comparing All Advanced Methods {#compare-advanced}
+
+        Now let's compare all the advanced machine learning methods we've implemented to see which ones perform best in estimating causal effects in our dataset.
+        """)
+        mo.output.replace(subsection_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, np, pd, plt):
+    def _():
+        # True ATE for reference
+        true_ate = (Y1_train - Y0_train).mean()
+
+        # Collect results from all advanced methods
+        # These would be calculated by previous cells, but we'll recreate them here for consistency
+        from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+        from sklearn.linear_model import LogisticRegression
+
+        # S-Learner (Random Forest)
+        def s_learner_rf(X, T, Y):
+            # Create combined dataset
+            X_combined = X.copy()
+            X_combined['treatment'] = T
+
+            # Fit model
+            model = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)
+            model.fit(X_combined, Y)
+
+            # Create counterfactual datasets
+            X_pred_1 = X.copy()
+            X_pred_1['treatment'] = 1
+
+            X_pred_0 = X.copy()
+            X_pred_0['treatment'] = 0
+
+            # Predict potential outcomes
+            y_pred_1 = model.predict(X_pred_1)
+            y_pred_0 = model.predict(X_pred_0)
+
+            # Calculate ATE
+            ate = (y_pred_1 - y_pred_0).mean()
+
+            return ate
+
+        # T-Learner (Random Forest)
+        def t_learner_rf(X, T, Y):
+            # Split data into treated and control groups
+            X_t = X[T == 1]
+            Y_t = Y[T == 1]
+            X_c = X[T == 0]
+            Y_c = Y[T == 0]
+
+            # Fit models
+            model_t = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)
+            model_c = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=43)
+            model_t.fit(X_t, Y_t)
+            model_c.fit(X_c, Y_c)
+
+            # Predict potential outcomes
+            y_pred_1 = model_t.predict(X)
+            y_pred_0 = model_c.predict(X)
+
+            # Calculate ATE
+            ate = (y_pred_1 - y_pred_0).mean()
+
+            return ate
+
+        # Doubly Robust (AIPW with RF)
+        def aipw_rf(X, T, Y):
+            # Split data by treatment group
+            X_t = X[T == 1]
+            Y_t = Y[T == 1]
+            X_c = X[T == 0]
+            Y_c = Y[T == 0]
+
+            # Fit outcome models
+            model_t = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=42)
+            model_c = RandomForestRegressor(n_estimators=100, min_samples_leaf=5, random_state=43)
+            model_t.fit(X_t, Y_t)
+            model_c.fit(X_c, Y_c)
+
+            # Predict potential outcomes
+            mu_1 = model_t.predict(X)
+            mu_0 = model_c.predict(X)
+
+            # Fit propensity model
+            ps_model = LogisticRegression(max_iter=1000)
+            ps_model.fit(X, T)
+            ps = ps_model.predict_proba(X)[:, 1]
+
+            # Handle extreme propensity scores
+            eps = 1e-12
+            ps = np.maximum(eps, np.minimum(1 - eps, ps))
+
+            # Calculate AIPW estimator
+            aipw_0 = mu_0 + (1 - T) * (Y - mu_0) / (1 - ps)
+            aipw_1 = mu_1 + T * (Y - mu_1) / ps
+
+            # Calculate ATE
+            ate = (aipw_1 - aipw_0).mean()
+
+            return ate
+
+        # Try to calculate Causal Forest ATE if available
+        try:
+            from econml.dml import CausalForestDML
+            from sklearn.linear_model import LassoCV
+
+            # Initialize and fit model
+            cf = CausalForestDML(
+                model_y=LassoCV(cv=3),
+                model_t=LogisticRegression(max_iter=1000),
+                n_estimators=100,
+                min_samples_leaf=5,
+                discrete_treatment=True,
+                random_state=42
+            )
+
+            cf.fit(Y_train, T_train, X=X_train_scaled)
+            cf_ate = cf.effect(X_train_scaled).mean()
+
+            include_cf = True
+        except:
+            include_cf = False
+
+        # Compute ATEs
+        sl_ate = s_learner_rf(X_train_scaled, T_train, Y_train)
+        tl_ate = t_learner_rf(X_train_scaled, T_train, Y_train)
+        aipw_ate = aipw_rf(X_train_scaled, T_train, Y_train)
+
+        # Compile results
+        results = [
+            {'Method': 'S-Learner (RF)', 'ATE': sl_ate, 'Bias': sl_ate - true_ate, 'Abs Bias': abs(sl_ate - true_ate), 'Type': 'Meta-Learner'},
+            {'Method': 'T-Learner (RF)', 'ATE': tl_ate, 'Bias': tl_ate - true_ate, 'Abs Bias': abs(tl_ate - true_ate), 'Type': 'Meta-Learner'},
+            {'Method': 'AIPW (RF, Logistic)', 'ATE': aipw_ate, 'Bias': aipw_ate - true_ate, 'Abs Bias': abs(aipw_ate - true_ate), 'Type': 'Doubly Robust'}
+        ]
+
+        # Add Causal Forest if available
+        if include_cf:
+            results.append({'Method': 'Causal Forest', 'ATE': cf_ate, 'Bias': cf_ate - true_ate, 'Abs Bias': abs(cf_ate - true_ate), 'Type': 'Causal Forest'})
+
+        # Convert to DataFrame and sort by absolute bias
+        results_df = pd.DataFrame(results)
+        results_df = results_df.sort_values('Abs Bias')
+
+        # Visualize comparison
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        # Plot with colors by method type
+        colors = {'Meta-Learner': 'skyblue', 'Doubly Robust': 'lightgreen', 'Causal Forest': 'salmon'}
+
+        for i, (_, row) in enumerate(results_df.iterrows()):
+            ax.barh(i, row['ATE'], color=colors[row['Type']], label=row['Type'] if row['Type'] not in ax.get_legend_handles_labels()[1] else "")
+
+        # Add method names and reference line
+        ax.set_yticks(range(len(results_df)))
+        ax.set_yticklabels(results_df['Method'])
+        ax.axvline(x=true_ate, color='red', linestyle='--', label=f'True ATE = {true_ate:.4f}')
+
+        # Add legend and labels
+        handles, labels = ax.get_legend_handles_labels()
+        unique_labels = []
+        unique_handles = []
+        for handle, label in zip(handles, labels):
+            if label not in unique_labels:
+                unique_labels.append(label)
+                unique_handles.append(handle)
+
+        ax.legend(unique_handles, unique_labels, loc='lower right')
+
+        ax.set_title('Comparison of Advanced Machine Learning Methods for Causal Inference')
+        ax.set_xlabel('ATE Estimate')
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        # Create interactive plot
+        plot = mo.mpl.interactive(fig)
+
+        # Best method summary
+        best_method_idx = results_df['Abs Bias'].idxmin()
+        best_method = results_df.loc[best_method_idx]
+
+        best_method_summary = mo.callout(
+            mo.md(f"""
+            **Best Advanced Method: {best_method['Method']}**
+
+            - **ATE Estimate**: {best_method['ATE']:.4f}
+            - **True ATE**: {true_ate:.4f}
+            - **Bias**: {best_method['Bias']:.4f}
+
+            Advanced machine learning methods can significantly improve causal estimates by capturing complex relationships 
+            between variables without requiring strong parametric assumptions.
+            """),
+            kind="success"
+        )
+
+        # Method comparison and analysis
+        method_analysis = mo.md("""
+        **Analysis of Advanced Methods**:
+
+        1. **Meta-Learners** leverage flexible machine learning algorithms to model outcomes or treatment effects. 
+           They work well when relationships are complex but depend heavily on the choice of base learner.
+
+        2. **Doubly Robust Methods** combine outcome modeling and propensity score approaches, providing protection 
+           against model misspecification. They tend to have lower bias and are more robust to model choice.
+
+        3. **Causal Forests** excel at capturing treatment effect heterogeneity and provide valuable insights through 
+           feature importance. They're particularly useful for understanding which subgroups benefit most from treatment.
+
+        The best method depends on the specific context, data structure, and research question. In practice, 
+        it's valuable to implement multiple methods and compare their results, as we've done here.
+        """)
+
+        # Combine all elements in the output
+        mo.output.replace(mo.vstack([
+            mo.md("#### Comparison of Advanced Machine Learning Methods"),
+            plot,
+            best_method_summary,
+            method_analysis,
+            mo.ui.table(results_df)
+        ]))
+    _()
     return
 
 
