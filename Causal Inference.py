@@ -1,14 +1,18 @@
 import marimo
 
 __generated_with = "0.10.16"
-app = marimo.App(width="medium", auto_download=["ipynb"])
+app = marimo.App(width="full", auto_download=["ipynb"])
 
 
 @app.cell(hide_code=True)
 def _():
     import marimo as mo
-    mo.image(src="https://imgs.xkcd.com/comics/correlation_2x.png").center()
-    return (mo,)
+    from IPython.display import Image
+
+    # Display using marimo's display capabilities
+    mo.as_html(Image(url="https://imgs.xkcd.com/comics/correlation_2x.png")).center()
+
+    return Image, mo
 
 
 @app.cell(hide_code=True)
@@ -24,202 +28,6 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""# Understanding Causal Inference with IHDP: From Theory to Practice""")
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    def _():
-        toc_md = mo.md("""
-        ## Table of Contents
-
-        1. [Introduction to Causal Inference](#introduction)
-        2. [Theoretical Foundations](#foundations)
-           - [Real-World Applications](#applications)
-           - [Key Concepts](#concepts)
-           - [Treatment Effects](#effects)
-           - [Key Assumptions](#assumptions)
-           - [Advanced Causal Inference Methods](#advanced-methods)
-           - [Key Terms in Causal Inference](#key-terms)
-        3. [The IHDP Dataset](#ihdp-intro)
-        4. [Exploratory Data Analysis](#eda)
-           - [Dataset Overview](#overview)
-           - [Covariate Analysis](#covariates)
-        5. [Setting Up for Causal Analysis](#analysis-setup)
-           - [Data Preparation](#data-prep)
-           - [Formulating the Causal Question](#causal-question)
-           - [Propensity Score Analysis](#propensity-analysis)
-        6. [Future Implementations](#future)
-           - [Machine Learning Methods for Causal Inference](#ml-methods)
-        """)
-        mo.output.replace(toc_md)
-    _()
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    def _():
-        section_header = mo.md("""## 6. Future Implementations {#future}
-
-        This section will include implementations of various causal inference methods:
-
-        - Basic regression approaches
-        - Matching methods
-        - Propensity score methods
-        - Advanced techniques like doubly robust estimation
-        - Machine learning methods for causal inference
-        """)
-        mo.output.replace(section_header)
-    _()
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    def _():
-        ml_header = mo.md("### 6.1 Machine Learning Methods for Causal Inference {#ml-methods}")
-
-        ml_description = mo.md("""
-        Machine learning approaches are increasingly being used to estimate causal effects, especially in high-dimensional settings where traditional methods may not perform well. These methods can help discover complex relationships in the data while maintaining causal interpretability.
-
-        The following machine learning methods will be implemented in future updates:
-        """)
-
-        ml_methods = mo.hstack([
-            mo.callout(
-                mo.md("""
-                #### Causal Forests
-
-                An extension of random forests designed specifically for causal inference. Causal forests:
-                - Estimate heterogeneous treatment effects
-                - Adapt to complex, non-linear relationships
-                - Provide valid statistical inference
-                - Are implemented in the `grf` R package and `econml` Python package
-
-                Causal forests partition the feature space to find regions with similar treatment effects, making them powerful tools for personalized treatment effect estimation.
-                """),
-                kind="info"
-            ),
-            mo.callout(
-                mo.md("""
-                #### Double/Debiased Machine Learning
-
-                A framework that combines machine learning with econometric techniques to provide robust causal estimates. It addresses bias concerns by:
-                - Using sample splitting (cross-fitting)
-                - Employing orthogonalization techniques
-                - Focusing on a low-dimensional causal parameter of interest
-                - Allowing for flexible ML models for nuisance functions
-
-                This approach yields valid inference even when using complex black-box models for estimating propensity scores or outcome models.
-                """),
-                kind="success"
-            )
-        ])
-
-        more_ml_methods = mo.hstack([
-            mo.callout(
-                mo.md("""
-                #### Meta-Learners
-
-                A class of algorithms that separate the estimation of treatment effects into multiple stages:
-                - **S-learner**: Fits a single model with treatment as a feature
-                - **T-learner**: Fits separate models for treated and control groups
-                - **X-learner**: Improves on T-learner by incorporating treatment propensities
-                - **R-learner**: Directly targets the treatment effect by orthogonalizing outcome and treatment
-
-                These approaches provide flexible frameworks for incorporating any machine learning method into causal inference.
-                """),
-                kind="warn"
-            ),
-            mo.callout(
-                mo.md("""
-                #### Causal Representation Learning
-
-                Cutting-edge approaches that learn representations of data that capture causal structure:
-                - Deep latent variable models that separate confounders from predictive features
-                - Neural networks designed to learn causal mechanisms
-                - Methods that combine domain knowledge with data-driven approaches
-
-                These methods are particularly useful when dealing with unstructured data like images or text, or when explicit causal assumptions are difficult to encode.
-                """),
-                kind="danger"
-            )
-        ])
-
-        note = mo.callout(
-            mo.md("""
-            **Implementation Plan**: Each method will be implemented with the IHDP dataset, compared against the known ground truth effects, and evaluated on its ability to capture both average and heterogeneous treatment effects. We'll provide code examples, visualizations of results, and discussions of strengths and limitations.
-            """),
-            kind="info"
-        )
-
-        mo.output.replace(mo.vstack([ml_header, ml_description, ml_methods, more_ml_methods, note]))
-    _()
-    return
-
-
-@app.cell(hide_code=True)
-def _(T_train, X_train_scaled, pd):
-    # Estimate propensity scores using logistic regression
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.metrics import roc_auc_score, roc_curve
-
-    # Fit logistic regression model to estimate propensity scores
-    propensity_model = LogisticRegression(max_iter=1000, C=1.0)
-    propensity_model.fit(X_train_scaled, T_train)
-
-    # Calculate propensity scores (probability of receiving treatment)
-    propensity_scores = propensity_model.predict_proba(X_train_scaled)[:, 1]
-
-    # Also estimate propensity scores using a Random Forest for comparison
-    rf_propensity_model = RandomForestClassifier(n_estimators=100, min_samples_leaf=10, random_state=42)
-    rf_propensity_model.fit(X_train_scaled, T_train)
-    rf_propensity_scores = rf_propensity_model.predict_proba(X_train_scaled)[:, 1]
-
-    # Create DataFrame with propensity scores
-    ps_df = pd.DataFrame({
-        'treatment': T_train,
-        'ps_logistic': propensity_scores,
-        'ps_rf': rf_propensity_scores
-    })
-
-    # Evaluate propensity score models
-    logistic_auc = roc_auc_score(T_train, propensity_scores)
-    rf_auc = roc_auc_score(T_train, rf_propensity_scores)
-
-    print(f"Logistic Regression AUC: {logistic_auc:.4f}")
-    print(f"Random Forest AUC: {rf_auc:.4f}")
-
-    # Return models and scores for future use
-    return (
-        LogisticRegression,
-        RandomForestClassifier,
-        logistic_auc,
-        propensity_model,
-        propensity_scores,
-        ps_df,
-        rf_auc,
-        rf_propensity_model,
-        rf_propensity_scores,
-        roc_auc_score,
-        roc_curve,
-    )
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    def _():
-        section_header = mo.md("""## 1. Introduction to Causal Inference {#introduction}""")
-        mo.output.replace(section_header)
-    _()
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.callout(mo.md("#Correlation does not imply causation"), kind="danger")
     return
 
 
@@ -882,7 +690,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(pd):
     from sklearn.model_selection import train_test_split
     import urllib.request
@@ -1215,7 +1023,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(ihdp_data, mo, pd, plt, sns, train_test_split):
     # Identify continuous and binary variables
     continuous_vars = ['x_0', 'x_1', 'x_2', 'x_3', 'x_4', 'x_12']
@@ -1373,7 +1181,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(T_train, Y0_train, Y1_train, Y_train, mo, pd, plt):
     def _():
         # Define the causal question components
@@ -1487,15 +1295,17 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
+    mo.callout(mo.md(
         """
         #### What are Propensity Scores?
 
         Propensity scores represent the probability that a unit receives the treatment, conditional on observed covariates. Mathematically, the propensity score is defined as:
 
-        $ e(X) = P(T=1|X) $
+        \[
+        e(X) = P(T=1|X)
+        \]
 
-        Where $T$ is the treatment indicator and $X$ represents the covariates.
+        Where \(T\) is the treatment indicator and \(X\) represents the covariates.
 
         #### Why Are Propensity Scores Important?
 
@@ -1509,7 +1319,7 @@ def _(mo):
 
         We'll estimate propensity scores using logistic regression and also explore a machine learning approach with random forests.
         """
-    )
+    ))
     return
 
 
@@ -2145,6 +1955,487 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
+def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, np, pd):
+    # Implement propensity score methods
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import roc_auc_score, roc_curve
+
+    # Estimate propensity scores using logistic regression
+    propensity_model = LogisticRegression(max_iter=1000, C=1.0)
+    propensity_model.fit(X_train_scaled, T_train)
+
+    # Calculate propensity scores (probability of receiving treatment)
+    propensity_scores = propensity_model.predict_proba(X_train_scaled)[:, 1]
+
+    # Also estimate propensity scores using a Random Forest for comparison
+    rf_propensity_model = RandomForestClassifier(n_estimators=100, min_samples_leaf=10, random_state=42)
+    rf_propensity_model.fit(X_train_scaled, T_train)
+    rf_propensity_scores = rf_propensity_model.predict_proba(X_train_scaled)[:, 1]
+
+    # Create DataFrame with propensity scores
+    ps_df = pd.DataFrame({
+        'treatment': T_train,
+        'ps_logistic': propensity_scores,
+        'ps_rf': rf_propensity_scores
+    })
+
+    # Evaluate propensity score models
+    logistic_auc = roc_auc_score(T_train, propensity_scores)
+    rf_auc = roc_auc_score(T_train, rf_propensity_scores)
+
+    print(f"Logistic Regression AUC: {logistic_auc:.4f}")
+    print(f"Random Forest AUC: {rf_auc:.4f}")
+
+    # 1. Implement Inverse Probability Weighting (IPW)
+    # Calculate true ATE for comparison
+    true_ate = (Y1_train - Y0_train).mean()
+
+    # Function to calculate IPW estimate
+    def ipw_estimator(T, Y, ps, stabilized=True, trimming=None):
+        """Calculate ATE using inverse probability weighting"""
+        # Calculate IPW weights
+        if stabilized:
+            # Stabilized weights
+            p_treatment = T.mean()
+            weights = np.where(T == 1, p_treatment / ps, (1 - p_treatment) / (1 - ps))
+        else:
+            # Unstabilized weights
+            weights = np.where(T == 1, 1 / ps, 1 / (1 - ps))
+
+        # Trim weights if requested
+        if trimming is not None:
+            max_weight = np.percentile(weights, trimming)
+            weights = np.minimum(weights, max_weight)
+
+        # Calculate weighted means
+        weighted_treated = np.sum(weights[T == 1] * Y[T == 1]) / np.sum(weights[T == 1])
+        weighted_control = np.sum(weights[T == 0] * Y[T == 0]) / np.sum(weights[T == 0])
+
+        # Calculate ATE
+        ate = weighted_treated - weighted_control
+
+        return ate, weights
+
+    # Calculate IPW estimates using different settings
+    ipw_results = []
+
+    for _ps_method, _ps_values in [('Logistic', propensity_scores), ('RF', rf_propensity_scores)]:
+        for stabilized in [True, False]:
+            for trimming in [None, 95]:
+                # Calculate IPW estimate
+                ipw_ate, weights = ipw_estimator(T_train, Y_train, _ps_values, 
+                                               stabilized=stabilized, trimming=trimming)
+
+                # Save result
+                ipw_results.append({
+                    'PS Method': _ps_method,
+                    'Stabilized': stabilized,
+                    'Trimming': trimming,
+                    'ATE': ipw_ate,
+                    'Bias': ipw_ate - true_ate,
+                    'Abs Bias': abs(ipw_ate - true_ate),
+                    'Max Weight': np.max(weights),
+                    'Weight SD': np.std(weights)
+                })
+
+    # Convert to DataFrame for easier visualization
+    ipw_results_df = pd.DataFrame(ipw_results)
+    print("\nIPW Estimation Results:")
+    print(ipw_results_df.sort_values('Abs Bias').head())
+
+    # Find best IPW method
+    best_ipw_idx = ipw_results_df['Abs Bias'].idxmin()
+    best_ipw = ipw_results_df.loc[best_ipw_idx]
+    best_ipw_method = f'IPW ({best_ipw["PS Method"]}, stabilized={best_ipw["Stabilized"]}, trimming={best_ipw["Trimming"]})'    
+
+    # Next cells will implement matching and stratification methods
+    return (
+        LogisticRegression,
+        RandomForestClassifier,
+        best_ipw,
+        best_ipw_idx,
+        best_ipw_method,
+        ipw_ate,
+        ipw_estimator,
+        ipw_results,
+        ipw_results_df,
+        logistic_auc,
+        propensity_model,
+        propensity_scores,
+        ps_df,
+        rf_auc,
+        rf_propensity_model,
+        rf_propensity_scores,
+        roc_auc_score,
+        roc_curve,
+        stabilized,
+        trimming,
+        true_ate,
+        weights,
+    )
+
+
+@app.cell(hide_code=True)
+def _(
+    T_train,
+    Y_train,
+    np,
+    pd,
+    propensity_scores,
+    rf_propensity_scores,
+    true_ate,
+):
+    # 2. Implement Propensity Score Matching
+    from sklearn.neighbors import NearestNeighbors
+
+    def ps_matching(T, Y, ps, method='nearest', k=1, caliper=None):
+        """Calculate ATE using propensity score matching"""
+        # Create a DataFrame with all necessary info
+        data = pd.DataFrame({
+            'treatment': T.values,
+            'outcome': Y.values,
+            'ps': ps
+        })
+
+        # Separate treated and control
+        treated = data[data['treatment'] == 1]
+        control = data[data['treatment'] == 0]
+
+        # Reshape propensity scores for NearestNeighbors
+        treated_ps = treated['ps'].values.reshape(-1, 1)
+        control_ps = control['ps'].values.reshape(-1, 1)
+
+        # Nearest neighbor matching
+        nn = NearestNeighbors(n_neighbors=k)
+        nn.fit(control_ps)
+        distances, indices = nn.kneighbors(treated_ps)
+
+        # For each treated unit, find its matches
+        matched_pairs = []
+
+        for i, treated_idx in enumerate(treated.index):
+            for j in range(k):
+                control_idx = control.index[indices[i, j]]
+                dist = distances[i, j]
+
+                # Apply caliper if specified
+                if caliper is None or dist < caliper * np.std(data['ps']):
+                    matched_pairs.append({
+                        'treated_ps': treated.loc[treated_idx, 'ps'],
+                        'control_ps': control.loc[control_idx, 'ps'],
+                        'treated_outcome': treated.loc[treated_idx, 'outcome'],
+                        'control_outcome': control.loc[control_idx, 'outcome'],
+                        'ps_diff': abs(treated.loc[treated_idx, 'ps'] - control.loc[control_idx, 'ps'])
+                    })
+
+        # Create dataframe of matched pairs
+        if len(matched_pairs) > 0:
+            matched_df = pd.DataFrame(matched_pairs)
+
+            # Calculate treatment effect
+            ate = (matched_df['treated_outcome'] - matched_df['control_outcome']).mean()
+
+            return ate, matched_df
+        else:
+            print("No matches found with current settings")
+            return np.nan, None
+
+    # Apply matching with different settings
+    matching_results = []
+
+    for _ps_method, _ps_values in [('Logistic', propensity_scores), ('RF', rf_propensity_scores)]:
+        for k in [1, 5]:
+            for caliper in [None, 0.2]:
+                # Skip multiple neighbors with no caliper
+                if k > 1 and caliper is None:
+                    continue
+
+                # Calculate matching estimate
+                psm_ate, matched_data = ps_matching(T_train, Y_train, _ps_values, 
+                                                  method='nearest', k=k, caliper=caliper)
+
+                if not np.isnan(psm_ate) and matched_data is not None:
+                    # Save result
+                    matching_results.append({
+                        'PS Method': _ps_method,
+                        'k': k,
+                        'Caliper': caliper,
+                        'ATE': psm_ate,
+                        'Bias': psm_ate - true_ate,
+                        'Abs Bias': abs(psm_ate - true_ate),
+                        'Matches': len(matched_data),
+                        'Matched Data': matched_data
+                    })
+
+    # Convert to DataFrame for easier visualization
+    matching_results_df = pd.DataFrame([
+        {k: v for k, v in result.items() if k != 'Matched Data'} for result in matching_results
+    ])
+
+    print("\nPropensity Score Matching Results:")
+    print(matching_results_df.sort_values('Abs Bias').head())
+
+    # Find best matching method
+    if not matching_results_df.empty:
+        best_match_idx = matching_results_df['Abs Bias'].idxmin()
+        best_match = matching_results_df.loc[best_match_idx]
+        best_match_method = f"Matching ({best_match['PS Method']}, k={best_match['k']}, caliper={best_match['Caliper']})"
+
+        # Get matched data for visualization
+        best_matched_data = matching_results[best_match_idx]['Matched Data']
+    else:
+        best_match = None
+        best_match_method = None
+        best_matched_data = None
+    return (
+        NearestNeighbors,
+        best_match,
+        best_match_idx,
+        best_match_method,
+        best_matched_data,
+        caliper,
+        k,
+        matched_data,
+        matching_results,
+        matching_results_df,
+        ps_matching,
+        psm_ate,
+    )
+
+
+@app.cell(hide_code=True)
+def _(
+    T_train,
+    Y_train,
+    best_ipw,
+    best_ipw_method,
+    best_match,
+    best_match_method,
+    mo,
+    np,
+    pd,
+    plt,
+    propensity_scores,
+    rf_propensity_scores,
+    true_ate,
+):
+    # 3. Implement Propensity Score Stratification
+
+    def ps_stratification(T, Y, ps, n_strata=5):
+        """Calculate ATE using propensity score stratification"""
+        # Create a DataFrame with all necessary variables
+        data = pd.DataFrame({
+            'treatment': T.values,
+            'outcome': Y.values,
+            'ps': ps
+        })
+
+        # Create strata based on propensity scores
+        data['stratum'] = pd.qcut(data['ps'], n_strata, labels=False)
+
+        # Calculate treatment effect within each stratum
+        stratum_effects = []
+        stratum_sizes = []
+        stratum_treated_counts = []
+        stratum_control_counts = []
+
+        for stratum in range(n_strata):
+            stratum_data = data[data['stratum'] == stratum]
+
+            # Check if both treated and control units exist in this stratum
+            treated_count = (stratum_data['treatment'] == 1).sum()
+            control_count = (stratum_data['treatment'] == 0).sum()
+
+            if treated_count > 0 and control_count > 0:
+                # Calculate treatment effect
+                treated_mean = stratum_data.loc[stratum_data['treatment'] == 1, 'outcome'].mean()
+                control_mean = stratum_data.loc[stratum_data['treatment'] == 0, 'outcome'].mean()
+                effect = treated_mean - control_mean
+
+                # Save effect and size
+                stratum_effects.append(effect)
+                stratum_sizes.append(len(stratum_data))
+                stratum_treated_counts.append(treated_count)
+                stratum_control_counts.append(control_count)
+            else:
+                print(f"Stratum {stratum} does not have both treated and control units.")
+
+        # Calculate weighted average of stratum-specific effects
+        if len(stratum_effects) > 0:
+            weights = np.array(stratum_sizes) / sum(stratum_sizes)
+            ate = sum(weights * np.array(stratum_effects))
+            return ate, stratum_effects, stratum_sizes, stratum_treated_counts, stratum_control_counts
+        else:
+            return np.nan, [], [], [], []
+
+    # Apply stratification with different propensity score models and strata numbers
+    strat_results = []
+
+    for _ps_method, _ps_values in [('Logistic', propensity_scores), ('RF', rf_propensity_scores)]:
+        for n_strata in [5, 10]:
+            # Calculate stratification estimate
+            strat_ate, stratum_effects, stratum_sizes, treated_counts, control_counts = \
+                ps_stratification(T_train, Y_train, _ps_values, n_strata)
+
+            if not np.isnan(strat_ate):
+                # Save result
+                strat_results.append({
+                    'PS Method': _ps_method,
+                    'n_strata': n_strata,
+                    'ATE': strat_ate,
+                    'Bias': strat_ate - true_ate,
+                    'Abs Bias': abs(strat_ate - true_ate),
+                    'Stratum Effects': stratum_effects,
+                    'Stratum Sizes': stratum_sizes,
+                    'Treated Counts': treated_counts,
+                    'Control Counts': control_counts
+                })
+
+    # Convert to DataFrame for easier visualization
+    strat_results_df = pd.DataFrame([
+        {k: v for k, v in result.items() if k not in ['Stratum Effects', 'Stratum Sizes', 
+                                                   'Treated Counts', 'Control Counts']} 
+        for result in strat_results
+    ])
+
+    print("\nPropensity Score Stratification Results:")
+    print(strat_results_df.sort_values('Abs Bias'))
+
+    # Find best stratification method
+    if not strat_results_df.empty:
+        best_strat_idx = strat_results_df['Abs Bias'].idxmin()
+        best_strat = strat_results_df.loc[best_strat_idx]
+        best_strat_method = f"Stratification ({best_strat['PS Method']}, n_strata={best_strat['n_strata']})"
+
+        # Extract details for visualization
+        best_strat_effects = strat_results[best_strat_idx]['Stratum Effects']
+        best_strat_sizes = strat_results[best_strat_idx]['Stratum Sizes'] 
+    else:
+        best_strat = None
+        best_strat_method = None
+        best_strat_effects = None
+        best_strat_sizes = None
+
+    # Create strata effects visualization
+    if best_strat_effects is not None:
+        strat_fig, ax = plt.subplots(figsize=(10, 6))
+        strata_indices = list(range(len(best_strat_effects)))
+        ax.bar(strata_indices, best_strat_effects, alpha=0.7)
+        ax.axhline(y=best_strat['ATE'], color='red', linestyle='--', 
+                  label=f'Overall ATE: {best_strat["ATE"]:.4f}')
+        ax.axhline(y=true_ate, color='green', linestyle=':', 
+                  label=f'True ATE: {true_ate:.4f}')
+        ax.set_title('Treatment Effects by Propensity Score Stratum')
+        ax.set_xlabel('Propensity Score Stratum (low to high)')
+        ax.set_ylabel('Stratum-Specific ATE')
+        ax.set_xticks(strata_indices)
+        ax.legend()
+        strat_plot = mo.mpl.interactive(strat_fig)
+    else:
+        strat_plot = None
+
+    # Compare all propensity score methods
+    ps_methods = []
+
+    # Add best methods from each category
+    ps_methods.append({
+        'Method': best_ipw_method,
+        'ATE': best_ipw['ATE'],
+        'Bias': best_ipw['Bias'],
+        'Abs Bias': best_ipw['Abs Bias'],
+        'Type': 'IPW'
+    })
+
+    if best_match is not None:
+        ps_methods.append({
+            'Method': best_match_method,
+            'ATE': best_match['ATE'],
+            'Bias': best_match['Bias'],
+            'Abs Bias': best_match['Abs Bias'],
+            'Type': 'Matching'
+        })
+
+    if best_strat is not None:
+        ps_methods.append({
+            'Method': best_strat_method,
+            'ATE': best_strat['ATE'],
+            'Bias': best_strat['Bias'],
+            'Abs Bias': best_strat['Abs Bias'],
+            'Type': 'Stratification'
+        })
+
+    # Convert to DataFrame and sort by absolute bias
+    ps_methods_df = pd.DataFrame(ps_methods)
+    ps_methods_df = ps_methods_df.sort_values('Abs Bias')
+
+    print("\nComparison of Best Propensity Score Methods:")
+    print(ps_methods_df)
+
+    # Create comparison visualization
+    comp_fig, comp_ax = plt.subplots(figsize=(10, 6))
+
+    # Plot bars
+    colors = {'IPW': 'skyblue', 'Matching': 'lightgreen', 'Stratification': 'salmon'}
+    for i, (idx, row) in enumerate(ps_methods_df.iterrows()):
+        comp_ax.barh(i, row['ATE'], color=colors[row['Type']], label=row['Type'] if i == 0 else "")
+
+    # Add method names and reference line
+    comp_ax.set_yticks(range(len(ps_methods_df)))
+    comp_ax.set_yticklabels(ps_methods_df['Method'])
+    comp_ax.axvline(x=true_ate, color='red', linestyle='--', label=f'True ATE = {true_ate:.4f}')
+
+    # Add legend and labels
+    handles, labels = comp_ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    comp_ax.legend(by_label.values(), by_label.keys(), loc='lower right')
+
+    comp_ax.set_title('Comparison of Best Propensity Score Methods')
+    comp_ax.set_xlabel('ATE Estimate')
+    comp_ax.grid(True, alpha=0.3)
+
+    # Create interactive plot for marimo
+    comparison_plot = mo.mpl.interactive(comp_fig)
+    return (
+        ax,
+        best_strat,
+        best_strat_effects,
+        best_strat_idx,
+        best_strat_method,
+        best_strat_sizes,
+        by_label,
+        colors,
+        comp_ax,
+        comp_fig,
+        comparison_plot,
+        control_counts,
+        handles,
+        i,
+        idx,
+        labels,
+        n_strata,
+        ps_methods,
+        ps_methods_df,
+        ps_stratification,
+        row,
+        strat_ate,
+        strat_fig,
+        strat_plot,
+        strat_results,
+        strat_results_df,
+        strata_indices,
+        stratum_effects,
+        stratum_sizes,
+        treated_counts,
+    )
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell(hide_code=True)
 def _(mo):
     def _():
         section_header = mo.md("""### 6.3 Advanced Machine Learning Methods {#ml-methods}
@@ -2158,113 +2449,9 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    # Create description of meta-learners
-    s_learner_description = mo.callout(
-        mo.md("""
-        #### S-Learner (Single-Model Learner)
-
-        The S-Learner uses a single model to estimate treatment effects by including the treatment as a feature:
-
-        1. Train a model $\hat{μ}(x, t)$ to predict outcome using both features $X$ and treatment $T$
-        2. Estimate treatment effect as $\hat{τ}(x) = \hat{μ}(x, 1) - \hat{μ}(x, 0)$
-
-        **Key Advantages**:
-        - Simple to implement
-        - Can use any regression model
-        - Works well when treatment effect is relatively constant
-
-        **Limitations**:
-        - May not capture treatment effect heterogeneity well
-        - Can be biased when treatment assignment is highly imbalanced
-        - Selection bias can influence the learned model
-        """),
-        kind="info"
-    )
-
-    t_learner_description = mo.callout(
-        mo.md("""
-        #### T-Learner (Two-Model Learner)
-
-        The T-Learner trains separate models for treated and control groups:
-
-        1. Train model $\hat{μ}_1(x)$ using only treated units ($T=1$)
-        2. Train model $\hat{μ}_0(x)$ using only control units ($T=0$)
-        3. Estimate treatment effect as $\hat{τ}(x) = \hat{μ}_1(x) - \hat{μ}_0(x)$
-
-        **Key Advantages**:
-        - Captures heterogeneity better than S-Learner
-        - Can use different model types for each group
-        - No implicit regularization of treatment effect
-
-        **Limitations**:
-        - May perform poorly in regions with limited data from one group
-        - Requires sufficient samples in both treatment groups
-        - Can be inefficient when treatment effects are simple
-        """),
-        kind="warn"
-    )
-
-    x_learner_description = mo.callout(
-        mo.md("""
-        #### X-Learner
-
-        The X-Learner extends T-Learner by incorporating imputed treatment effects and propensity scores:
-
-        1. Train outcome models $\hat{μ}_1(x)$ and $\hat{μ}_0(x)$ as in T-Learner
-        2. Impute treatment effects for each unit:
-           - For treated: $\hat{D}_i = Y_i(1) - \hat{μ}_0(X_i)$
-           - For control: $\hat{D}_i = \hat{μ}_1(X_i) - Y_i(0)$
-        3. Train models $\hat{τ}_1(x)$ and $\hat{τ}_0(x)$ to predict these imputed effects
-        4. Combine using propensity scores: $\hat{τ}(x) = g(x)\hat{τ}_0(x) + (1-g(x))\hat{τ}_1(x)$
-
-        **Key Advantages**:
-        - Works well with strong confounding
-        - Particularly effective with imbalanced treatment groups
-        - Often more accurate than S- and T-Learners
-
-        **Limitations**:
-        - More complex to implement
-        - Requires accurate propensity score estimation
-        - Relies on accurate counterfactual predictions
-        """),
-        kind="success"
-    )
-
-    causal_forest_description = mo.callout(
-        mo.md("""
-        #### Causal Forests
-
-        Causal Forests adapt random forests to estimate heterogeneous treatment effects:
-
-        1. Build a forest of causal trees that split the data to maximize treatment effect heterogeneity
-        2. Each tree is trained on a random subset of data and features
-        3. For prediction, find similar observations through the forest structure
-        4. Estimate treatment effect as the average difference in outcomes among similar observations
-
-        **Key Advantages**:
-        - Automatically discovers treatment effect heterogeneity
-        - Provides valid statistical inference
-        - Handles high-dimensional features well
-        - Robust to the presence of many irrelevant features
-
-        **Limitations**:
-        - Computationally intensive
-        - May require large sample sizes for reliable estimation
-        - Less interpretable than simpler models
-        """),
-        kind="danger"
-    )
-
-    # Display all method descriptions together
-    mo.vstack([s_learner_description, t_learner_description, x_learner_description, causal_forest_description])
-    return (
-        causal_forest_description,
-        s_learner_description,
-        t_learner_description,
-        x_learner_description,
-    )
+@app.cell
+def _():
+    return
 
 
 if __name__ == "__main__":
