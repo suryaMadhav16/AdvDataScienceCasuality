@@ -11,7 +11,6 @@ def _():
 
     # Display using marimo's display capabilities
     mo.as_html(Image(url="https://imgs.xkcd.com/comics/correlation_2x.png")).center()
-
     return Image, mo
 
 
@@ -2430,8 +2429,67 @@ def _(
     )
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(comparison_plot, mo, ps_methods_df, strat_plot, true_ate):
+    # Display results of Propensity Score Methods
+    def _():
+        # Create header for the section
+        header = mo.md("#### Comparison of Propensity Score Methods")
+
+        # Create explanation text
+        explanation = mo.md("""
+        We've implemented and compared three propensity score-based causal inference methods:
+
+        1. **Inverse Probability Weighting (IPW)**: Weights observations inversely to their probability of receiving the treatment to create balance.
+        2. **Propensity Score Matching**: Pairs treated units with similar control units based on propensity scores.
+        3. **Propensity Score Stratification**: Divides the sample into strata based on propensity scores and calculates treatment effects within each stratum.
+
+        Each method has different strengths and weaknesses. The comparison below shows their performance in estimating the Average Treatment Effect (ATE).
+        """)
+
+        # Create results summary
+        best_method_idx = ps_methods_df['Abs Bias'].idxmin()
+        best_method = ps_methods_df.loc[best_method_idx]
+
+        summary = mo.callout(
+            mo.md(f"""
+            **Best Method: {best_method['Method']}**
+
+            - Estimated ATE: {best_method['ATE']:.4f}
+            - True ATE: {true_ate:.4f}
+            - Absolute Bias: {best_method['Abs Bias']:.4f}
+
+            This analysis shows that propensity score methods can effectively reduce bias in causal estimates from observational data.
+            """),
+            kind="success"
+        )
+
+        # Create table with results
+        results_table = mo.ui.table(ps_methods_df.reset_index(drop=True))
+
+        # Display comparison plot
+        plot_header = mo.md("#### Visual Comparison of Methods")
+
+        # Display stratification plot if available
+        if strat_plot is not None:
+            strat_header = mo.md("#### Treatment Effects by Propensity Score Stratum")
+            strat_explanation = mo.md("""
+            This plot shows how treatment effects vary across different propensity score strata. 
+            Heterogeneity in these effects may indicate effect modification by variables related to treatment assignment.
+            """)
+            strat_section = mo.vstack([strat_header, strat_explanation, strat_plot])
+        else:
+            strat_section = mo.md("")
+
+        # Combine all components
+        components = [header, explanation, summary, results_table, plot_header, comparison_plot]
+        if strat_plot is not None:
+            components.append(strat_section)
+
+        # Display all components
+        mo.output.replace(mo.vstack(components))
+
+    _()
     return
 
 
