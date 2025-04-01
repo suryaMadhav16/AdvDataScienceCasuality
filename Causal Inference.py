@@ -2500,10 +2500,109 @@ def _(mo):
 
         > 🚀 **Step 3**: Leverage machine learning techniques for improved causal inference
 
-        Finally, we'll explore advanced methods that combine machine learning with causal inference principles to estimate treatment effects more accurately.
+        Finally, we'll explore advanced methods that combine machine learning with causal inference principles to estimate treatment effects more accurately. These methods can capture complex non-linear relationships and interactions between variables without requiring strong parametric assumptions.
         """)
         mo.output.replace(section_header)
     _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        subsection_header = mo.md("""#### 6.3.1 Meta-Learners for Causal Inference {#meta-learners}
+
+        Meta-learners are a class of methods that use machine learning algorithms to estimate causal effects by combining multiple prediction models in different ways. Unlike traditional methods, meta-learners can capture complex, non-linear relationships between variables without requiring explicit parametric assumptions.
+        """)
+        mo.output.replace(subsection_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Create descriptions of meta-learner methods
+    s_learner_desc = mo.callout(
+        mo.md(r"""
+        #### S-Learner (Single Model)
+
+        The S-Learner (Single model) uses a single machine learning model with the treatment indicator included as a regular feature:
+
+        1. **Train a model** to predict outcome using both covariates and treatment: 
+           \[ \hat{\mu}(x, t) = E[Y | X=x, T=t] \]
+
+        2. **Estimate treatment effects** by taking the difference in predictions for treated vs. untreated:
+           \[ \hat{\tau}(x) = \hat{\mu}(x, 1) - \hat{\mu}(x, 0) \]
+
+        **Advantages**: Simple to implement, requires only one model
+        
+        **Limitations**: May underestimate treatment effects if treatment assignment is highly imbalanced
+        """),
+        kind="info"
+    )
+
+    t_learner_desc = mo.callout(
+        mo.md(r"""
+        #### T-Learner (Two Models)
+
+        The T-Learner (Two models) fits separate models for the treated and control groups:
+
+        1. **Train two separate models**:
+           - Control model: \[ \hat{\mu}_0(x) = E[Y | X=x, T=0] \]
+           - Treatment model: \[ \hat{\mu}_1(x) = E[Y | X=x, T=1] \]
+
+        2. **Estimate treatment effects** by taking the difference in predictions:
+           \[ \hat{\tau}(x) = \hat{\mu}_1(x) - \hat{\mu}_0(x) \]
+
+        **Advantages**: Can capture heterogeneous response surfaces, doesn't impose shared structure
+        
+        **Limitations**: May suffer from high variance in regions with few samples from either group
+        """),
+        kind="warn"
+    )
+
+    x_learner_desc = mo.callout(
+        mo.md(r"""
+        #### X-Learner
+
+        The X-Learner extends the T-Learner with a more sophisticated approach:
+
+        1. **Train response surface models** (same as T-Learner):
+           - Control model: \[ \hat{\mu}_0(x) = E[Y | X=x, T=0] \]
+           - Treatment model: \[ \hat{\mu}_1(x) = E[Y | X=x, T=1] \]
+
+        2. **Impute individual treatment effects** for each unit:
+           - For treated units: \[ D_i^1 = Y_i(1) - \hat{\mu}_0(X_i) \]
+           - For control units: \[ D_i^0 = \hat{\mu}_1(X_i) - Y_i(0) \]
+
+        3. **Train two treatment effect models**:
+           - Using treated units: \[ \hat{\tau}_1(x) = E[D_i^1 | X_i=x] \]
+           - Using control units: \[ \hat{\tau}_0(x) = E[D_i^0 | X_i=x] \]
+
+        4. **Combine the two estimates** using a weighting function g(x):
+           \[ \hat{\tau}(x) = g(x)\hat{\tau}_0(x) + (1-g(x))\hat{\tau}_1(x) \]
+           where g(x) can be the propensity score.
+
+        **Advantages**: Performs well with heterogeneous treatment effects and imbalanced treatment groups
+        
+        **Limitations**: More complex, requires estimating propensity scores
+        """),
+        kind="success"
+    )
+
+    # Stack all descriptions
+    mo.vstack([
+        mo.md("Meta-learners use machine learning algorithms to estimate causal effects. Here are the three main types:"),
+        s_learner_desc,
+        t_learner_desc,
+        x_learner_desc
+    ])
+    return (s_learner_desc, t_learner_desc, x_learner_desc)
+
+
+@app.cell
+def _():
+    # Machine learning methods
     return
 
 
