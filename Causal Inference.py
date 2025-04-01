@@ -12,6 +12,16 @@ def _():
 
 
 @app.cell(hide_code=True)
+def _():
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LinearRegression
+    return LinearRegression, np, pd, plt, sns
+
+
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""# Understanding Causal Inference with IHDP: From Theory to Practice""")
     return
@@ -149,9 +159,53 @@ def _(mo):
     return
 
 
-@app.cell
-def _():
-    return
+@app.cell(hide_code=True)
+def _(T_train, X_train_scaled, pd):
+    # Estimate propensity scores using logistic regression
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import roc_auc_score, roc_curve
+
+    # Fit logistic regression model to estimate propensity scores
+    propensity_model = LogisticRegression(max_iter=1000, C=1.0)
+    propensity_model.fit(X_train_scaled, T_train)
+
+    # Calculate propensity scores (probability of receiving treatment)
+    propensity_scores = propensity_model.predict_proba(X_train_scaled)[:, 1]
+
+    # Also estimate propensity scores using a Random Forest for comparison
+    rf_propensity_model = RandomForestClassifier(n_estimators=100, min_samples_leaf=10, random_state=42)
+    rf_propensity_model.fit(X_train_scaled, T_train)
+    rf_propensity_scores = rf_propensity_model.predict_proba(X_train_scaled)[:, 1]
+
+    # Create DataFrame with propensity scores
+    ps_df = pd.DataFrame({
+        'treatment': T_train,
+        'ps_logistic': propensity_scores,
+        'ps_rf': rf_propensity_scores
+    })
+
+    # Evaluate propensity score models
+    logistic_auc = roc_auc_score(T_train, propensity_scores)
+    rf_auc = roc_auc_score(T_train, rf_propensity_scores)
+
+    print(f"Logistic Regression AUC: {logistic_auc:.4f}")
+    print(f"Random Forest AUC: {rf_auc:.4f}")
+
+    # Return models and scores for future use
+    return (
+        LogisticRegression,
+        RandomForestClassifier,
+        logistic_auc,
+        propensity_model,
+        propensity_scores,
+        ps_df,
+        rf_auc,
+        rf_propensity_model,
+        rf_propensity_scores,
+        roc_auc_score,
+        roc_curve,
+    )
 
 
 @app.cell(hide_code=True)
@@ -190,14 +244,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    import numpy as np
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from sklearn.linear_model import LinearRegression
-
-
+def _(LinearRegression, mo, np, pd, plt):
     # Set random seed for reproducibility
     np.random.seed(42)
 
@@ -252,7 +299,6 @@ def _(mo):
     # Return interactive plot for marimo
     mo.mpl.interactive(fig_1)
     return (
-        LinearRegression,
         ax1,
         ax2,
         confounder,
@@ -260,12 +306,8 @@ def _(mo):
         fig_1,
         model,
         n,
-        np,
         outcome,
-        pd,
-        plt,
         scatter,
-        sns,
         treatment,
         x_range,
     )
@@ -487,12 +529,9 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(mo, np, plt):
     def _():
         # Visualize the overlap assumption
-        import numpy as np
-        import matplotlib.pyplot as plt
-
         # Use local variables with unique names to avoid conflicts
         sample_size = 1000  # Instead of reusing 'n'
 
@@ -957,11 +996,6 @@ def _(ihdp_data, mo, plt, sns):
     return
 
 
-@app.cell
-def _():
-    return
-
-
 @app.cell(hide_code=True)
 def _(ihdp_data, mo, plt, sns):
     # Visualize outcome distributions by treatment
@@ -1259,7 +1293,7 @@ def _(ihdp_data, mo, pd, plt, sns, train_test_split):
         axes[1].legend()
 
         plt.tight_layout()
-        
+
         # Replace plt.show() with mo.mpl.interactive for interactivity
         return mo.mpl.interactive(fig)
 
@@ -1451,9 +1485,786 @@ def _(mo):
     return
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(
+        """
+        #### What are Propensity Scores?
+
+        Propensity scores represent the probability that a unit receives the treatment, conditional on observed covariates. Mathematically, the propensity score is defined as:
+
+        $ e(X) = P(T=1|X) $
+
+        Where $T$ is the treatment indicator and $X$ represents the covariates.
+
+        #### Why Are Propensity Scores Important?
+
+        Propensity scores help address the fundamental challenge in causal inference: units are either treated or untreated, never both. By conditioning on the propensity score, we can create balance between treated and control groups, mimicking a randomized experiment.
+
+        Key properties of propensity scores include:
+
+        1. **Balancing score**: Conditioning on the propensity score balances the distribution of covariates between treatment groups
+        2. **Dimensionality reduction**: Reduces multiple covariates to a single score
+        3. **Identification of areas of common support**: Helps identify regions where causal inference is reliable
+
+        We'll estimate propensity scores using logistic regression and also explore a machine learning approach with random forests.
+        """
+    )
     return
+
+
+@app.cell(hide_code=True)
+def _(mo, plt, ps_df, sns):
+    def _():
+        # Create a figure for propensity score distributions
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        # Plot 1: Logistic regression propensity score distributions
+        sns.histplot(
+            data=ps_df, x='ps_logistic', hue='treatment', 
+            bins=30, element="step", common_norm=False,
+            ax=axes[0], alpha=0.7
+        )
+        axes[0].set_title('Propensity Score Distribution (Logistic Regression)')
+        axes[0].set_xlabel('Propensity Score')
+        axes[0].set_ylabel('Count')
+
+        # Plot 2: Random forest propensity score distributions
+        sns.histplot(
+            data=ps_df, x='ps_rf', hue='treatment', 
+            bins=30, element="step", common_norm=False,
+            ax=axes[1], alpha=0.7
+        )
+        axes[1].set_title('Propensity Score Distribution (Random Forest)')
+        axes[1].set_xlabel('Propensity Score')
+        axes[1].set_ylabel('Count')
+
+        plt.tight_layout()
+
+        # Return the interactive plot
+        plot = mo.mpl.interactive(fig)
+        header = mo.md("#### Propensity Score Distributions")
+        mo.output.replace(mo.vstack([header, plot]))
+
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(T_train, mo, pd, propensity_scores, rf_propensity_scores):
+    def _():
+        # Check for overlap/positivity assumption
+        # Calculate min and max propensity scores for treated and control groups
+        ps_stats = pd.DataFrame({
+            'Model': ['Logistic Regression', 'Random Forest'],
+            'Min (Treated)': [propensity_scores[T_train == 1].min(), rf_propensity_scores[T_train == 1].min()],
+            'Max (Treated)': [propensity_scores[T_train == 1].max(), rf_propensity_scores[T_train == 1].max()],
+            'Min (Control)': [propensity_scores[T_train == 0].min(), rf_propensity_scores[T_train == 0].min()],
+            'Max (Control)': [propensity_scores[T_train == 0].max(), rf_propensity_scores[T_train == 0].max()]
+        })
+
+        # Calculate common support region
+        ps_stats['Common Support Min'] = ps_stats[['Min (Treated)', 'Min (Control)']].max(axis=1)
+        ps_stats['Common Support Max'] = ps_stats[['Max (Treated)', 'Max (Control)']].min(axis=1)
+
+        # Calculate percentage of units in common support
+        in_support_logistic = ((propensity_scores >= ps_stats.loc[0, 'Common Support Min']) & 
+                              (propensity_scores <= ps_stats.loc[0, 'Common Support Max'])).mean() * 100
+        in_support_rf = ((rf_propensity_scores >= ps_stats.loc[1, 'Common Support Min']) & 
+                        (rf_propensity_scores <= ps_stats.loc[1, 'Common Support Max'])).mean() * 100
+
+        ps_stats['Units in Common Support (%)'] = [in_support_logistic, in_support_rf]
+
+        # Count extreme propensity scores (< 0.1 or > 0.9)
+        extreme_ps_logistic = ((propensity_scores < 0.1) | (propensity_scores > 0.9)).mean() * 100
+        extreme_ps_rf = ((rf_propensity_scores < 0.1) | (rf_propensity_scores > 0.9)).mean() * 100
+
+        ps_stats['Extreme PS (%)'] = [extreme_ps_logistic, extreme_ps_rf]
+
+        # Create markdown output
+        header = mo.md("#### Overlap and Common Support Analysis")
+
+        explanation = mo.md("""
+        To satisfy the positivity assumption for causal inference, we need sufficient overlap in propensity scores between treated and control groups. A good overlap indicates that units with similar characteristics have a chance of being in either treatment group.
+
+        The **common support region** is the range of propensity scores where both treated and control units exist. Ideally, we want most units to fall within this region. Units outside this region may be problematic for causal inference.
+
+        **Extreme propensity scores** (close to 0 or 1) indicate units that are very likely to be in one group only, which can cause issues for some causal inference methods.
+        """)
+
+        table = mo.ui.table(ps_stats.round(4))
+
+        # Assessment of positivity assumption
+        assessment = mo.callout(
+            mo.md("""
+            **Assessment of Positivity Assumption:**  
+
+            - For the logistic regression model, {:.1f}% of units are within the common support region.  
+            - The random forest model shows {:.1f}% of units in common support.  
+            - Extreme propensity scores affect {:.1f}% (logistic) and {:.1f}% (random forest) of units.  
+
+            The {} model provides better overlap. Overall, the positivity assumption appears to be {} satisfied, which {} for reliable causal inference using propensity score methods.
+            """.format(
+                in_support_logistic, 
+                in_support_rf,
+                extreme_ps_logistic,
+                extreme_ps_rf,
+                "logistic regression" if in_support_logistic > in_support_rf else "random forest",
+                "reasonably well" if max(in_support_logistic, in_support_rf) > 80 else "partially",
+                "is promising" if max(in_support_logistic, in_support_rf) > 80 else "raises some concerns"
+            )),
+            kind="info"
+        )
+
+        mo.output.replace(mo.vstack([header, explanation, table, assessment]))
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(
+    T_train,
+    X_train_scaled,
+    mo,
+    np,
+    pd,
+    plt,
+    propensity_scores,
+    rf_propensity_scores,
+    roc_auc_score,
+    roc_curve,
+):
+    def _():
+        # Create a figure for ROC curves
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Calculate ROC curves
+        fpr_lr, tpr_lr, _ = roc_curve(T_train, propensity_scores)
+        fpr_rf, tpr_rf, _ = roc_curve(T_train, rf_propensity_scores)
+
+        # Calculate AUC scores
+        auc_lr = roc_auc_score(T_train, propensity_scores)
+        auc_rf = roc_auc_score(T_train, rf_propensity_scores)
+
+        # Plot ROC curves
+        ax.plot(fpr_lr, tpr_lr, lw=2, label=f'Logistic Regression (AUC = {auc_lr:.3f})')
+        ax.plot(fpr_rf, tpr_rf, lw=2, label=f'Random Forest (AUC = {auc_rf:.3f})')
+        ax.plot([0, 1], [0, 1], 'k--', lw=2)
+
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.05])
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('True Positive Rate')
+        ax.set_title('ROC Curves for Propensity Score Models')
+        ax.legend(loc='lower right')
+
+        # Calculate standardized mean differences for covariates
+        def calc_smd(var, treatment):
+            """Calculate standardized mean difference for a variable"""
+            treated_mean = var[treatment == 1].mean()
+            control_mean = var[treatment == 0].mean()
+            treated_var = var[treatment == 1].var()
+            control_var = var[treatment == 0].var()
+            pooled_std = np.sqrt((treated_var + control_var) / 2)
+            # Handle zero standard deviation
+            if pooled_std == 0:
+                return 0
+            return (treated_mean - control_mean) / pooled_std
+
+        # Calculate SMD for each variable
+        smd_values = []
+        for col in X_train_scaled.columns:
+            smd = calc_smd(X_train_scaled[col], T_train)
+            smd_values.append({'Variable': col, 'SMD': smd})
+
+        smd_df = pd.DataFrame(smd_values)
+
+        # Sort by absolute SMD
+        smd_df['Abs_SMD'] = smd_df['SMD'].abs()
+        smd_df = smd_df.sort_values('Abs_SMD', ascending=False)
+
+        # Create two-part layout
+        roc_plot = mo.mpl.interactive(fig)
+        roc_header = mo.md("#### Propensity Score Model Evaluation")
+        roc_explanation = mo.md("""
+        The ROC curves and AUC scores show how well our propensity score models discriminate between treated and control units. Higher AUC indicates better discrimination. 
+
+        The Random Forest model typically achieves higher AUC, but this doesn't necessarily make it better for propensity score estimation. In fact, for propensity score analysis, we often prefer models that achieve good covariate balance rather than maximizing predictive performance.
+        """)
+
+        # Show balance table for top 10 most imbalanced covariates
+        balance_header = mo.md("#### Covariate Balance Assessment")
+        balance_explanation = mo.md("""
+        The table below shows the standardized mean differences (SMD) for the most imbalanced covariates. SMD measures the difference in means between treated and control groups in standard deviation units.
+
+        - **SMD > 0.1**: Indicates meaningful imbalance
+        - **SMD > 0.25**: Indicates substantial imbalance
+
+        Effective propensity score methods should reduce these imbalances when we condition on the propensity score.
+        """)
+
+        balance_table = mo.ui.table(smd_df.head(10).round(4))
+
+        # Combine all elements
+        mo.output.replace(mo.vstack([
+            roc_header, 
+            roc_plot,
+            roc_explanation,
+            balance_header,
+            balance_explanation,
+            balance_table
+        ]))
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.callout(mo.md("""
+    **Summary of Propensity Score Analysis:**
+
+    1. We've estimated propensity scores using both logistic regression and random forest models.
+    2. The distributions show some separation between treated and control groups, which is expected in observational data.
+    3. The common support analysis confirms that most units fall within regions where causal inference is reliable.
+    4. The covariate balance assessment identifies which variables contribute most to selection bias.
+
+    These propensity scores will be used in subsequent sections for implementing various causal inference methods including:
+    - Inverse Probability Weighting (IPW)
+    - Propensity Score Matching
+    - Propensity Score Stratification
+    - Doubly Robust methods
+
+    Each method leverages propensity scores differently to estimate causal effects while accounting for confounding.
+    """), kind="success")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        section_header = mo.md("""## 6. Implementing Causal Inference Methods {#methods}
+
+        In this section, we'll implement and evaluate various causal inference methods on the IHDP dataset. We'll start with simple methods, then move to propensity score-based approaches, and finally explore advanced machine learning methods. For each method, we'll:
+
+        1. Explain the methodology and key assumptions
+        2. Implement the method on our training data
+        3. Evaluate its performance against the known ground truth
+        4. Discuss strengths, weaknesses, and practical considerations
+        """)
+        mo.output.replace(section_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        section_header = mo.md("""### 6.1 Simple Causal Inference Methods {#simple-methods}
+
+        > 🔍 **Step 1**: Start with simple methods before moving to more complex approaches
+
+        We'll begin with straightforward approaches that form the foundation of causal inference. These methods are easy to implement and interpret, making them excellent starting points for causal analysis.
+        """)
+        mo.output.replace(section_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Create a description of naive mean difference approach
+    naive_description = mo.callout(
+        mo.md(r"""
+        #### Naive Mean Difference
+
+        The simplest approach to estimating causal effects is to compare the average outcomes between treated and control groups:
+
+        \[
+        \hat{ATE}_{naive} = \frac{1}{n_1}\sum_{i:T_i=1}Y_i - \frac{1}{n_0}\sum_{i:T_i=0}Y_i
+        \]
+
+        where \(n_1\) is the number of treated units and \(n_0\) is the number of control units.
+
+        **Key Assumption**: Treatment is randomly assigned (no confounding).
+
+        **Limitations**: In observational studies, this estimate is often biased due to confounding factors that affect both treatment assignment and outcomes.
+        """),
+        kind="info"
+    )
+
+    # Create a description of regression adjustment approach
+    regression_description = mo.callout(
+        mo.md(r"""
+        #### Regression Adjustment
+
+        This method controls for confounding by including covariates in a regression model:
+
+        \[
+        Y_i = \alpha + \tau T_i + \beta X_i + \epsilon_i
+        \]
+
+        The coefficient \(\tau\) of the treatment variable \(T\) provides an estimate of the ATE.
+
+        **Key Assumption**: The regression model is correctly specified (includes all confounders and captures their relationships with the outcome).
+
+        **Advantages**: Simple to implement, interpretable, can handle continuous and binary covariates.
+
+        **Limitations**: Relies on strong assumptions about the functional form of the relationship between covariates and outcomes.
+        """),
+        kind="warn"
+    )
+
+    # Create a description of stratification approach
+    stratification_description = mo.callout(
+        mo.md(r"""
+        #### Stratification/Subclassification
+
+        This method divides the data into subgroups (strata) based on important covariates, estimates treatment effects within each stratum, and takes a weighted average:
+
+        \[
+        \hat{ATE}_{strat} = \sum_{s=1}^{S} w_s (\bar{Y}_{s,1} - \bar{Y}_{s,0})
+        \]
+
+        where \(\bar{Y}_{s,1}\) is the average outcome for treated units in stratum \(s\), \(\bar{Y}_{s,0}\) is the average for control units, and \(w_s\) is the proportion of units in stratum \(s\).
+
+        **Key Assumption**: Within each stratum, treatment is effectively randomly assigned.
+
+        **Advantages**: Intuitive, handles non-linear relationships, allows examination of effect heterogeneity.
+
+        **Limitations**: Can only stratify on a few variables before encountering sparsity issues.
+        """),
+        kind="success"
+    )
+
+    # Display all method descriptions together
+    mo.vstack([naive_description, regression_description, stratification_description])
+    return (
+        naive_description,
+        regression_description,
+        stratification_description,
+    )
+
+
+@app.cell(hide_code=True)
+def _(
+    LinearRegression,
+    T_train,
+    X_train_scaled,
+    Y0_train,
+    Y1_train,
+    Y_train,
+    mo,
+    pd,
+    plt,
+):
+    def _():
+        # 1. Naive Mean Difference
+        def naive_estimator(T, Y):
+            """Calculate naive mean difference between treated and control outcomes"""
+            treated_mean = Y[T == 1].mean()
+            control_mean = Y[T == 0].mean()
+            ate = treated_mean - control_mean
+            return ate
+
+        # Calculate naive ATE
+        naive_ate = naive_estimator(T_train, Y_train)
+
+        # Get true ATE for comparison
+        true_ate = (Y1_train - Y0_train).mean()    
+
+        def regression_adjustment(X, T, Y):
+            """Estimate ATE using regression adjustment"""
+            # Create a copy of X to avoid modifying the original
+            X_with_treatment = X.copy()
+            # Add treatment as a feature
+            X_with_treatment['treatment'] = T
+
+            # Fit linear regression model
+            model = LinearRegression()
+            model.fit(X_with_treatment, Y)
+
+            # Extract treatment coefficient
+            treatment_idx = X_with_treatment.columns.get_loc('treatment')
+            ate = model.coef_[treatment_idx]
+
+            return ate, model
+
+        # Calculate regression-adjusted ATE
+        reg_ate, reg_model = regression_adjustment(X_train_scaled, T_train, Y_train)
+
+        # 3. Stratification on an important covariate
+        def stratification(X, T, Y, stratify_var, n_strata=5):
+            """Estimate ATE by stratifying on a variable"""
+            # Create a copy of the data with relevant variables
+            data = pd.DataFrame({
+                'T': T,
+                'Y': Y,
+                'strat_var': X[stratify_var]
+            })
+
+            # Create equal-sized strata based on the stratification variable
+            data['stratum'] = pd.qcut(data['strat_var'], n_strata, labels=False)
+
+            # Calculate treatment effect within each stratum
+            strata_effects = []
+            strata_sizes = []
+
+            for s in range(n_strata):
+                stratum_data = data[data['stratum'] == s]
+                # Only calculate if we have both treated and control units
+                if (stratum_data['T'] == 1).sum() > 0 and (stratum_data['T'] == 0).sum() > 0:
+                    stratum_treated = stratum_data[stratum_data['T'] == 1]['Y'].mean()
+                    stratum_control = stratum_data[stratum_data['T'] == 0]['Y'].mean()
+                    stratum_effect = stratum_treated - stratum_control
+                    stratum_size = len(stratum_data)
+
+                    strata_effects.append(stratum_effect)
+                    strata_sizes.append(stratum_size)
+
+            # Calculate weighted average (weighted by stratum size)
+            total_size = sum(strata_sizes)
+            weights = [size / total_size for size in strata_sizes]
+            weighted_ate = sum(effect * weight for effect, weight in zip(strata_effects, weights))
+
+            return weighted_ate, strata_effects, weights
+
+        # Choose birth weight (x_0) as stratification variable
+        strat_ate, strat_effects, strat_weights = stratification(X_train_scaled, T_train, Y_train, 'x_0')
+
+        # Compile results
+        methods = ['Naive Mean Difference', 'Regression Adjustment', 'Stratification']
+        estimates = [naive_ate, reg_ate, strat_ate]
+        biases = [est - true_ate for est in estimates]
+        abs_biases = [abs(bias) for bias in biases]
+
+        # Print results
+        print("Simple Methods Results:")
+        print(f"True ATE: {true_ate:.4f}")
+        print("-" * 50)
+        for method, estimate, bias in zip(methods, estimates, biases):
+            print(f"{method}: ATE = {estimate:.4f}, Bias = {bias:.4f}")
+
+        # Return all relevant objects for use in visualization
+            # Create figure for comparing estimates from simple methods
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        # Plot 1: Bar chart comparing ATE estimates
+        bars = axes[0].bar(methods, estimates, color=['skyblue', 'lightgreen', 'salmon'])
+        axes[0].axhline(y=true_ate, color='red', linestyle='--', label=f'True ATE = {true_ate:.4f}')
+        axes[0].set_title('ATE Estimates from Simple Methods')
+        axes[0].set_ylabel('ATE Estimate')
+        axes[0].legend()
+
+        # Add value labels to the bars
+        for bar in bars:
+            height = bar.get_height()
+            axes[0].text(
+                bar.get_x() + bar.get_width()/2., 
+                height + 0.05,
+                f'{height:.4f}',
+                ha='center', va='bottom', 
+                rotation=0
+            )
+
+        # Plot 2: Bar chart for bias
+        biases_df = pd.DataFrame({
+            'Method': methods,
+            'Absolute Bias': abs_biases
+        }).sort_values('Absolute Bias')
+
+        bars = axes[1].barh(biases_df['Method'], biases_df['Absolute Bias'], color=['lightgreen', 'skyblue', 'salmon'])
+        axes[1].set_title('Absolute Bias of Simple Methods')
+        axes[1].set_xlabel('Absolute Bias')
+
+        # Add value labels to the bars
+        for bar in bars:
+            width = bar.get_width()
+            axes[1].text(
+                width + 0.005, 
+                bar.get_y() + bar.get_height()/2.,
+                f'{width:.4f}',
+                ha='left', va='center'
+            )
+
+        plt.tight_layout()
+
+        # Create visualization for stratification results
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+
+        # Plot stratum-specific effects
+        strata_indices = list(range(len(strat_effects)))
+        ax2.bar(strata_indices, strat_effects, alpha=0.7)
+        ax2.axhline(y=true_ate, color='red', linestyle='--', label=f'True ATE = {true_ate:.4f}')
+
+        # Set labels and title
+        ax2.set_title('Treatment Effects by Stratum')
+        ax2.set_xlabel('Stratum (Birth Weight Quintile)')
+        ax2.set_ylabel('Treatment Effect')
+        ax2.set_xticks(strata_indices)
+        ax2.set_xticklabels([f'Q{i+1}\n({w:.2f})' for i, w in enumerate(strat_weights)])
+        ax2.legend()
+
+        # Create layout containing both visualizations
+        header = mo.md("#### Simple Methods Comparison")
+        methods_comparison = mo.mpl.interactive(fig)
+
+        strat_header = mo.md("#### Heterogeneous Effects by Birth Weight Stratum")
+        strat_note = mo.md("*Note: Numbers in parentheses show the weight of each stratum in the overall estimate.*")
+        strat_effects_plot = mo.mpl.interactive(fig2)
+
+        methods_analysis = mo.callout(
+            mo.md(f"""
+            **Analysis of Simple Methods:**
+
+            1. **Naive Mean Difference**: The naive estimate has a bias of {biases[0]:.4f}, which is {abs_biases[0]:.4f} in absolute terms. This is relatively {'small' if abs_biases[0] < 0.1 else 'moderate' if abs_biases[0] < 0.5 else 'large'}, suggesting that selection bias in this dataset may not be very strong.
+
+            2. **Regression Adjustment**: This method has a bias of {biases[1]:.4f} (absolute: {abs_biases[1]:.4f}), {'improving upon' if abs_biases[1] < abs_biases[0] else 'performing worse than'} the naive estimator. This {'improvement' if abs_biases[1] < abs_biases[0] else 'decline'} in performance suggests that the linear model {'adequately' if abs_biases[1] < abs_biases[0] else 'inadequately'} captures the relationship between covariates and outcomes.
+
+            3. **Stratification**: This approach has a bias of {biases[2]:.4f} (absolute: {abs_biases[2]:.4f}), {'outperforming' if abs_biases[2] < min(abs_biases[0], abs_biases[1]) else 'underperforming compared to'} the other methods. Stratification by birth weight reveals some heterogeneity in treatment effects across strata, which is valuable information for targeting interventions.
+
+            Overall, the {'Regression Adjustment' if abs_biases[1] == min(abs_biases) else 'Naive Mean Difference' if abs_biases[0] == min(abs_biases) else 'Stratification'} method performs best in terms of bias reduction for this dataset. However, all methods show relatively small bias, suggesting that the selection mechanism in this semi-synthetic dataset may not induce strong confounding.
+            """),
+            kind="info"
+        )
+
+        # Combine all elements
+        mo.output.replace(mo.vstack([
+            header,
+            methods_comparison,
+            methods_analysis,
+            strat_header,
+            strat_effects_plot,
+            strat_note
+        ]))
+
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        section_header = mo.md("""### 6.2 Propensity Score Methods {#ps-methods}
+
+        > 🎯 **Step 2**: Apply propensity score-based methods to adjust for confounding
+
+        Building on the propensity scores we estimated earlier, we'll now implement methods that use these scores to create balance between treated and control groups.
+        """)
+        mo.output.replace(section_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Create a description of IPW approach
+    ipw_description = mo.callout(
+        mo.md(r"""
+        #### Inverse Probability Weighting (IPW)
+
+        IPW creates a pseudo-population where the confounding influence is eliminated by weighting each observation by the inverse of its probability of receiving the treatment it actually received:
+
+        \[
+        \hat{ATE}_{IPW} = \frac{1}{n} \sum_{i=1}^{n} \left( \frac{T_i Y_i}{e(X_i)} - \frac{(1-T_i) Y_i}{1-e(X_i)} \right)
+        \]
+
+        where \(e(X_i)\) is the propensity score for unit \(i\).
+
+        **Key Advantages**:
+        - Uses all data points
+        - Simple to implement
+        - Intuitive connection to survey sampling
+
+        **Limitations**:
+        - Sensitive to extreme propensity scores (near 0 or 1)
+        - Can have high variance
+        - Requires well-specified propensity model
+        """),
+        kind="info"
+    )
+
+    # Create a description of matching approach
+    matching_description = mo.callout(
+        mo.md(r"""
+        #### Propensity Score Matching
+
+        Matching pairs treated units with control units that have similar propensity scores. The average difference in outcomes between matched pairs provides an estimate of the ATE:
+
+        \[
+        \hat{ATE}_{match} = \frac{1}{n_1} \sum_{i:T_i=1} (Y_i - Y_{j(i)})
+        \]
+
+        where \(j(i)\) is the index of the control unit matched to treated unit \(i\).
+
+        **Key Advantages**:
+        - Intuitive and easy to explain
+        - Can be combined with exact matching on key variables
+        - Preserves the original outcome variable scale
+
+        **Limitations**:
+        - Discards units that cannot be matched
+        - Choice of matching algorithm and caliper can affect results
+        - Matches may not be perfect, leaving some residual confounding
+        """),
+        kind="warn"
+    )
+
+    # Create a description of stratification approach using propensity scores
+    ps_stratification_description = mo.callout(
+        mo.md(r"""
+        #### Propensity Score Stratification
+
+        This method divides the data into strata based on propensity scores, estimates treatment effects within each stratum, and computes a weighted average:
+
+        \[
+        \hat{ATE}_{strat} = \sum_{s=1}^{S} w_s (\bar{Y}_{s,1} - \bar{Y}_{s,0})
+        \]
+
+        where \(w_s\) is the proportion of units in stratum \(s\), and \(\bar{Y}_{s,1}\) and \(\bar{Y}_{s,0}\) are the average outcomes for treated and control units in that stratum.
+
+        **Key Advantages**:
+        - Uses all data points
+        - Examines effect heterogeneity across propensity score strata
+        - Usually reduces ~90% of confounding bias with just 5 strata
+
+        **Limitations**:
+        - Less precise than matching for estimating average effects
+        - Choice of strata boundaries can affect results
+        - May not fully eliminate confounding within strata
+        """),
+        kind="success"
+    )
+
+    # Display all method descriptions together
+    mo.vstack([ipw_description, matching_description, ps_stratification_description])
+    return (
+        ipw_description,
+        matching_description,
+        ps_stratification_description,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        section_header = mo.md("""### 6.3 Advanced Machine Learning Methods {#ml-methods}
+
+        > 🚀 **Step 3**: Leverage machine learning techniques for improved causal inference
+
+        Finally, we'll explore advanced methods that combine machine learning with causal inference principles to estimate treatment effects more accurately.
+        """)
+        mo.output.replace(section_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Create description of meta-learners
+    s_learner_description = mo.callout(
+        mo.md("""
+        #### S-Learner (Single-Model Learner)
+
+        The S-Learner uses a single model to estimate treatment effects by including the treatment as a feature:
+
+        1. Train a model $\hat{μ}(x, t)$ to predict outcome using both features $X$ and treatment $T$
+        2. Estimate treatment effect as $\hat{τ}(x) = \hat{μ}(x, 1) - \hat{μ}(x, 0)$
+
+        **Key Advantages**:
+        - Simple to implement
+        - Can use any regression model
+        - Works well when treatment effect is relatively constant
+
+        **Limitations**:
+        - May not capture treatment effect heterogeneity well
+        - Can be biased when treatment assignment is highly imbalanced
+        - Selection bias can influence the learned model
+        """),
+        kind="info"
+    )
+
+    t_learner_description = mo.callout(
+        mo.md("""
+        #### T-Learner (Two-Model Learner)
+
+        The T-Learner trains separate models for treated and control groups:
+
+        1. Train model $\hat{μ}_1(x)$ using only treated units ($T=1$)
+        2. Train model $\hat{μ}_0(x)$ using only control units ($T=0$)
+        3. Estimate treatment effect as $\hat{τ}(x) = \hat{μ}_1(x) - \hat{μ}_0(x)$
+
+        **Key Advantages**:
+        - Captures heterogeneity better than S-Learner
+        - Can use different model types for each group
+        - No implicit regularization of treatment effect
+
+        **Limitations**:
+        - May perform poorly in regions with limited data from one group
+        - Requires sufficient samples in both treatment groups
+        - Can be inefficient when treatment effects are simple
+        """),
+        kind="warn"
+    )
+
+    x_learner_description = mo.callout(
+        mo.md("""
+        #### X-Learner
+
+        The X-Learner extends T-Learner by incorporating imputed treatment effects and propensity scores:
+
+        1. Train outcome models $\hat{μ}_1(x)$ and $\hat{μ}_0(x)$ as in T-Learner
+        2. Impute treatment effects for each unit:
+           - For treated: $\hat{D}_i = Y_i(1) - \hat{μ}_0(X_i)$
+           - For control: $\hat{D}_i = \hat{μ}_1(X_i) - Y_i(0)$
+        3. Train models $\hat{τ}_1(x)$ and $\hat{τ}_0(x)$ to predict these imputed effects
+        4. Combine using propensity scores: $\hat{τ}(x) = g(x)\hat{τ}_0(x) + (1-g(x))\hat{τ}_1(x)$
+
+        **Key Advantages**:
+        - Works well with strong confounding
+        - Particularly effective with imbalanced treatment groups
+        - Often more accurate than S- and T-Learners
+
+        **Limitations**:
+        - More complex to implement
+        - Requires accurate propensity score estimation
+        - Relies on accurate counterfactual predictions
+        """),
+        kind="success"
+    )
+
+    causal_forest_description = mo.callout(
+        mo.md("""
+        #### Causal Forests
+
+        Causal Forests adapt random forests to estimate heterogeneous treatment effects:
+
+        1. Build a forest of causal trees that split the data to maximize treatment effect heterogeneity
+        2. Each tree is trained on a random subset of data and features
+        3. For prediction, find similar observations through the forest structure
+        4. Estimate treatment effect as the average difference in outcomes among similar observations
+
+        **Key Advantages**:
+        - Automatically discovers treatment effect heterogeneity
+        - Provides valid statistical inference
+        - Handles high-dimensional features well
+        - Robust to the presence of many irrelevant features
+
+        **Limitations**:
+        - Computationally intensive
+        - May require large sample sizes for reliable estimation
+        - Less interpretable than simpler models
+        """),
+        kind="danger"
+    )
+
+    # Display all method descriptions together
+    mo.vstack([s_learner_description, t_learner_description, x_learner_description, causal_forest_description])
+    return (
+        causal_forest_description,
+        s_learner_description,
+        t_learner_description,
+        x_learner_description,
+    )
 
 
 if __name__ == "__main__":
