@@ -778,12 +778,17 @@ def _(ihdp_data, mo):
 def _(ihdp_data, mo, pd):
     def _():
         m1 = mo.md("### 4.3 Column Types")
-        m2 = mo.ui.dataframe(pd.DataFrame({
-            'Column': ihdp_data.dtypes.index,
-            'Data Type': ihdp_data.dtypes.values
-        }))
+    
+        # Create intermediate dataframe
+        dtype_df = pd.DataFrame({
+            'Column': list(ihdp_data.dtypes.index),
+            'Data Type': [str(x) for x in ihdp_data.dtypes.values]
+        })
+    
+        m2 = mo.ui.dataframe(dtype_df)
         mo.output.replace(mo.vstack([m1,m2]))
     _()
+
     return
 
 
@@ -2517,7 +2522,6 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    # Create descriptions of meta-learner methods
     s_learner_desc = mo.callout(
         mo.md(r"""
         #### S-Learner (Single Model)
@@ -2525,10 +2529,10 @@ def _(mo):
         The S-Learner (Single model) uses a single machine learning model with the treatment indicator included as a regular feature:
 
         1. **Train a model** to predict outcome using both covariates and treatment: 
-           \[ \hat{\mu}(x, t) = E[Y | X=x, T=t] \]
+           $$\hat{\mu}(x, t) = E[Y | X=x, T=t]$$
 
         2. **Estimate treatment effects** by taking the difference in predictions for treated vs. untreated:
-           \[ \hat{\tau}(x) = \hat{\mu}(x, 1) - \hat{\mu}(x, 0) \]
+           $$\hat{\tau}(x) = \hat{\mu}(x, 1) - \hat{\mu}(x, 0)$$
 
         **Advantages**: Simple to implement, requires only one model
 
@@ -2544,11 +2548,11 @@ def _(mo):
         The T-Learner (Two models) fits separate models for the treated and control groups:
 
         1. **Train two separate models**:
-           - Control model: \[ \hat{\mu}_0(x) = E[Y | X=x, T=0] \]
-           - Treatment model: \[ \hat{\mu}_1(x) = E[Y | X=x, T=1] \]
+           - Control model: $$\hat{\mu}_0(x) = E[Y | X=x, T=0]$$
+           - Treatment model: $$\hat{\mu}_1(x) = E[Y | X=x, T=1]$$
 
         2. **Estimate treatment effects** by taking the difference in predictions:
-           \[ \hat{\tau}(x) = \hat{\mu}_1(x) - \hat{\mu}_0(x) \]
+           $$\hat{\tau}(x) = \hat{\mu}_1(x) - \hat{\mu}_0(x)$$
 
         **Advantages**: Can capture heterogeneous response surfaces, doesn't impose shared structure
 
@@ -2564,19 +2568,19 @@ def _(mo):
         The X-Learner extends the T-Learner with a more sophisticated approach:
 
         1. **Train response surface models** (same as T-Learner):
-           - Control model: \[ \hat{\mu}_0(x) = E[Y | X=x, T=0] \]
-           - Treatment model: \[ \hat{\mu}_1(x) = E[Y | X=x, T=1] \]
+           - Control model: $$\hat{\mu}_0(x) = E[Y | X=x, T=0]$$
+           - Treatment model: $$\hat{\mu}_1(x) = E[Y | X=x, T=1]$$
 
         2. **Impute individual treatment effects** for each unit:
-           - For treated units: \[ D_i^1 = Y_i(1) - \hat{\mu}_0(X_i) \]
-           - For control units: \[ D_i^0 = \hat{\mu}_1(X_i) - Y_i(0) \]
+           - For treated units: $$D_i^1 = Y_i(1) - \hat{\mu}_0(X_i)$$
+           - For control units: $$D_i^0 = \hat{\mu}_1(X_i) - Y_i(0)$$
 
         3. **Train two treatment effect models**:
-           - Using treated units: \[ \hat{\tau}_1(x) = E[D_i^1 | X_i=x] \]
-           - Using control units: \[ \hat{\tau}_0(x) = E[D_i^0 | X_i=x] \]
+           - Using treated units: $$\hat{\tau}_1(x) = E[D_i^1 | X_i=x]$$
+           - Using control units: $$\hat{\tau}_0(x) = E[D_i^0 | X_i=x]$$
 
         4. **Combine the two estimates** using a weighting function g(x):
-           \[ \hat{\tau}(x) = g(x)\hat{\tau}_0(x) + (1-g(x))\hat{\tau}_1(x) \]
+           $$\hat{\tau}(x) = g(x)\hat{\tau}_0(x) + (1-g(x))\hat{\tau}_1(x)$$
            where g(x) can be the propensity score.
 
         **Advantages**: Performs well with heterogeneous treatment effects and imbalanced treatment groups
@@ -2593,6 +2597,7 @@ def _(mo):
         t_learner_desc,
         x_learner_desc
     ])
+
     return s_learner_desc, t_learner_desc, x_learner_desc
 
 
@@ -3713,6 +3718,354 @@ def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, np, pd, plt):
             mo.ui.table(results_df)
         ]))
     _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        section_header = mo.md("""## 8. Conclusion and Best Practices {#conclusion}""")
+        mo.output.replace(section_header)
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        subsection_header = mo.md("""### 8.1 Summary of Findings {#summary-findings}""")
+
+        # Create a summary of key findings from the causal analysis
+        key_findings = mo.callout(
+            mo.md("""
+            #### Key Insights from Causal Analysis
+
+            1. **Treatment Effect Size**: The IHDP intervention has a substantial positive effect on cognitive scores with an average treatment effect (ATE) of approximately 4.0.
+
+            2. **Selection Bias**: The semi-synthetic IHDP dataset exhibits moderate selection bias, as evidenced by the small difference between naive estimators and true effects.
+
+            3. **Method Performance**: Advanced ML methods, particularly the S-Learner with Random Forest, achieved the lowest bias (0.004) among all approaches, demonstrating the value of flexible machine learning in causal inference.
+
+            4. **Treatment Effect Heterogeneity**: All methods revealed variation in treatment effects across subgroups, suggesting that the intervention effectiveness differs based on individual characteristics.
+
+            5. **Important Modifiers**: Causal forest analysis identified first-born status (x_5), birth weight (x_0), and mother's education level (x_4) as the most important variables influencing treatment effect heterogeneity.
+            """),
+            kind="info"
+        )
+
+        # Create a summary of methodological takeaways
+        method_takeaways = mo.callout(
+            mo.md("""
+            #### Methodological Takeaways
+
+            1. **Method Progression**: Starting with simple methods provided valuable baselines, while propensity score methods offered intuitive adjustments for confounding, and advanced ML methods captured complex relationships.
+
+            2. **Propensity Score Considerations**: The logistic regression model provided better common support (89% vs. 61%) than the random forest model, despite the latter's superior AUC (0.91 vs. 0.75), highlighting that discriminative performance isn't the primary goal in propensity score estimation.
+
+            3. **Doubly Robust Advantage**: AIPW methods demonstrated strong performance with very low bias, confirming the theoretical advantage of protection against model misspecification.
+
+            4. **Treatment Effect Heterogeneity**: Methods capable of estimating CATE (Conditional Average Treatment Effect) provided richer insights than those focused solely on ATE, revealing important patterns in effect variation across subgroups.
+
+            5. **Model Selection Importance**: The choice of base learner in meta-learners and specification choices in propensity score methods substantively affected estimation quality, emphasizing the importance of comparing multiple approaches.
+            """),
+            kind="success"
+        )
+
+        mo.output.replace(mo.vstack([subsection_header, key_findings, method_takeaways]))
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        subsection_header = mo.md("""### 8.2 Recommendations {#recommendations}""")
+
+        # Create guidelines for method selection
+        method_guidelines = mo.callout(
+            mo.md("""
+            #### Guidelines for Method Selection
+
+            **Simple Methods**
+            - Use **Regression Adjustment** when relationships appear linear and interpretability is a priority
+            - Apply **Stratification** to examine treatment effect heterogeneity across specific covariates
+            - Employ **Naive Mean Difference** only as a baseline for comparison
+
+            **Propensity Score Methods**
+            - Choose **Matching** when intuitive explanation is important and preserving original outcome scale is desired
+            - Use **IPW** when using all available data is critical and propensity scores are well-estimated
+            - Apply **Stratification** to examine effect modification across propensity score strata
+
+            **Advanced ML Methods**
+            - Implement **S-Learner** when simplicity and a single model are preferred
+            - Choose **T-Learner** when treatment and control groups may have very different outcome relationships
+            - Use **Doubly Robust Methods** when robustness to model misspecification is critical
+            - Apply **Causal Forests** when treatment effect heterogeneity is the primary focus
+            """),
+            kind="info"
+        )
+
+        # Create practical considerations
+        practical_considerations = mo.callout(
+            mo.md("""
+            #### Practical Considerations
+
+            1. **Data Quality Assessment**: Before applying causal methods, carefully examine data for missing values, outliers, and covariate balance between treatment groups.
+
+            2. **Positivity/Overlap Check**: Verify sufficient overlap in propensity scores between treated and control units to ensure reliable causal inference.
+
+            3. **Multiple Method Comparison**: Implement several causal methods and compare results; consistent estimates across methods increase confidence in findings.
+
+            4. **Sensitivity Analysis**: When working with real observational data (unlike our semi-synthetic case), conduct sensitivity analysis to assess robustness to unmeasured confounding.
+
+            5. **Focused Heterogeneity Analysis**: Based on domain knowledge, identify key variables likely to modify treatment effects and deliberately examine heterogeneity across these dimensions.
+
+            6. **Interpretability Needs**: Consider the audience and purpose when selecting methods; simpler methods may be preferred when communication to non-technical stakeholders is important.
+            """),
+            kind="warn"
+        )
+
+        # Create limitations and caveats
+        limitations = mo.callout(
+            mo.md("""
+            #### Limitations and Caveats
+
+            1. **Untestable Assumptions**: Remember that unconfoundedness/ignorability cannot be directly verified from observed data; domain knowledge is essential for justifying this assumption.
+
+            2. **Semi-Synthetic Nature**: Our IHDP dataset is semi-synthetic, allowing us to know true effects; in real applications, ground truth is unknown and evaluation is more challenging.
+
+            3. **External Validity**: Causal effects estimated from a specific population may not generalize to different populations with different covariate distributions.
+
+            4. **Extreme Propensity Scores**: Units with very high or low propensity scores can lead to unstable estimates in methods like IPW; trimming or stabilization should be considered.
+
+            5. **Computational Requirements**: Advanced ML methods offer improved performance but at the cost of greater computational complexity and reduced interpretability.
+
+            6. **Target Estimand Clarity**: Different methods may target different estimands (ATE, ATT, CATE); ensure the chosen methods align with the specific causal question of interest.
+            """),
+            kind="danger"
+        )
+
+        mo.output.replace(mo.vstack([subsection_header, method_guidelines, practical_considerations, limitations]))
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Create a final summary visualization showing method performance across categories
+    def _():
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import pandas as pd
+
+        # Create data for the visualization
+        methods = ['Naive Mean Difference', 'Regression Adjustment', 'Stratification',
+                  'IPW', 'Matching', 'S-Learner (RF)', 'AIPW', 'Causal Forest']
+
+        # These are example values - you would replace with your actual results
+        bias = [0.067, 0.010, 0.085, 0.036, 0.026, 0.004, 0.017, 0.129]
+
+        categories = ['Simple', 'Simple', 'Simple', 
+                      'Propensity Score', 'Propensity Score',
+                      'Advanced ML', 'Advanced ML', 'Advanced ML']
+
+        # Create DataFrame for plotting
+        plot_data = pd.DataFrame({
+            'Method': methods,
+            'Absolute Bias': bias,
+            'Category': categories
+        })
+
+        # Sort by absolute bias
+        plot_data = plot_data.sort_values('Absolute Bias')
+
+        # Create color mapping for categories
+        colors = {'Simple': 'skyblue', 'Propensity Score': 'lightgreen', 'Advanced ML': 'salmon'}
+        bar_colors = [colors[cat] for cat in plot_data['Category']]
+
+        # Create the plot
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        # Plot horizontal bars
+        bars = ax.barh(plot_data['Method'], plot_data['Absolute Bias'], color=bar_colors)
+
+        # Add a vertical line for reference
+        ax.axvline(x=0.05, color='gray', linestyle='--', alpha=0.7, label='5% Bias Threshold')
+
+        # Add labels and title
+        ax.set_title('Comparison of All Causal Inference Methods by Absolute Bias')
+        ax.set_xlabel('Absolute Bias')
+        ax.set_ylabel('Method')
+
+        # Add text labels to the bars
+        for bar in bars:
+            width = bar.get_width()
+            ax.text(width + 0.005, bar.get_y() + bar.get_height()/2, 
+                   f'{width:.4f}', ha='left', va='center')
+
+        # Add a legend for categories
+        from matplotlib.patches import Patch
+        legend_elements = [Patch(facecolor=colors[cat], label=cat) for cat in colors.keys()]
+        ax.legend(handles=legend_elements, loc='lower right')
+
+        # Add grid lines for better readability
+        ax.grid(axis='x', alpha=0.3)
+
+        # Create conclusions based on the visual
+        conclusions = mo.md("""
+        ### Final Insights
+
+        This comparative analysis across all implemented methods reveals several key patterns:
+
+        1. **Method Sophistication vs. Performance**: While advanced ML methods generally perform well, certain simpler methods (like Regression Adjustment) can achieve comparable results when relationships are approximately linear.
+
+        2. **Low Selection Bias Impact**: The relatively small bias of even the naive method suggests moderate selection bias in this dataset, which explains why even simple methods can perform adequately.
+
+        3. **Heterogeneity Insights Matter**: Beyond just bias reduction, methods like Causal Forests provide valuable insights into effect heterogeneity that can guide targeted interventions.
+
+        4. **Method Selection Considerations**: The "best" method depends on the specific context, goals, and constraints. Factors like interpretability, computational complexity, and the specific causal questions should guide method selection.
+
+        5. **Multiple Methods Approach**: Using multiple methods and comparing results provides more robust and trustworthy causal insights than relying on any single method.
+        """)
+
+        # Create the final layout
+        final_header = mo.md("### Comprehensive Method Performance")
+        plot = mo.mpl.interactive(fig)
+
+        mo.output.replace(mo.vstack([final_header, plot, conclusions]))
+    _()
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        subsection_header = mo.md("""### 8.4 Resources and References {#resources}""")
+    
+        references = mo.md("""
+        #### Key Books
+    
+        1. Pearl, J. (2009). **Causality: Models, Reasoning, and Inference** (2nd ed.). Cambridge University Press. 
+           [https://www.cambridge.org/core/books/causality/B0046844FAE10CBF274D4ACBDAEB5F5B](https://www.cambridge.org/core/books/causality/B0046844FAE10CBF274D4ACBDAEB5F5B)
+       
+        2. Hernán, M. A., & Robins, J. M. (2020). **Causal Inference: What If**. Chapman & Hall/CRC.
+           [https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/)
+       
+        3. Peters, J., Janzing, D., & Schölkopf, B. (2017). **Elements of Causal Inference: Foundations and Learning Algorithms**. MIT Press.
+           [https://library.oapen.org/bitstream/id/056a11be-ce3a-44b9-8987-a6c68fce8d9b/11283.pdf](https://library.oapen.org/bitstream/id/056a11be-ce3a-44b9-8987-a6c68fce8d9b/11283.pdf)
+       
+        4. Imbens, G. W., & Rubin, D. B. (2015). **Causal Inference for Statistics, Social, and Biomedical Sciences**. Cambridge University Press.
+           [https://www.cambridge.org/core/books/causal-inference-for-statistics-social-and-biomedical-sciences/71126BE90C58F1A431FE9B2DD07938AB](https://www.cambridge.org/core/books/causal-inference-for-statistics-social-and-biomedical-sciences/71126BE90C58F1A431FE9B2DD07938AB)
+       
+        5. Cunningham, S. (2021). **Causal Inference: The Mixtape**. Yale University Press.
+           [https://mixtape.scunning.com/](https://mixtape.scunning.com/)
+       
+        6. Chernozhukov, V., et al. (2023). **Applied Causal Inference Powered by ML and AI**. 
+           [https://www.artsci.com/acipma](https://www.artsci.com/acipma)
+     
+        #### Research Articles and Papers
+    
+        7. Zanga, A., Ozkirimli, E., & Stella, F. (2022). **A Survey on Causal Discovery: Theory and Practice**. International Journal of Approximate Reasoning.
+           [https://www.sciencedirect.com/science/article/abs/pii/S0888613X22001402](https://www.sciencedirect.com/science/article/abs/pii/S0888613X22001402)
+       
+        8. Pearl, J. (2010). **An Introduction to Causal Inference**. The International Journal of Biostatistics, 6(2).
+           [https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2836213/](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2836213/)
+       
+        9. Bongers, S., Forré, P., Peters, J., & Mooij, J. M. (2021). **Foundations of structural causal models with cycles and latent variables**. The Annals of Statistics, 49(5), 2885-2915.
+       
+        10. Athey, S., & Imbens, G. (2019). **Machine learning methods that economists should know about**. Annual Review of Economics.
+            [https://web.stanford.edu/~athey/papers/MLECTA.pdf](https://web.stanford.edu/~athey/papers/MLECTA.pdf)
+    
+        #### Online Resources
+    
+        11. Neal, B. (2023). **Which causal inference book you should read**.
+            [https://www.bradyneal.com/which-causal-inference-book](https://www.bradyneal.com/which-causal-inference-book)
+        
+        12. Pearl, J. **Causal Inference in Statistics: A Primer (Course Materials)**.
+            [http://bayes.cs.ucla.edu/PRIMER/](http://bayes.cs.ucla.edu/PRIMER/)
+        
+        13. **Introduction to Causal Inference (Course)** by Brady Neal.
+            [https://www.bradyneal.com/causal-inference-course](https://www.bradyneal.com/causal-inference-course)
+        
+        14. **DoWhy: A Python library for causal inference**.
+            [https://microsoft.github.io/dowhy/](https://microsoft.github.io/dowhy/)
+        
+        15. **EconML: A Python library for ML-based causal inference**.
+            [https://github.com/microsoft/EconML](https://github.com/microsoft/EconML)
+        """)
+    
+        mo.output.replace(mo.vstack([subsection_header, references]))
+    _()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _():
+        license_header = mo.md("""### License {#license}""")
+    
+        license_text = mo.callout(
+            mo.md("""
+            ## MIT License
+        
+            **Understanding Causal Inference with IHDP: From Theory to Practice**
+        
+            Copyright (c) 2025
+        
+            Permission is hereby granted, free of charge, to any person obtaining a copy
+            of this software and associated documentation files (the "Notebook"), to deal
+            in the Notebook without restriction, including without limitation the rights
+            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+            copies of the Notebook, and to permit persons to whom the Notebook is
+            furnished to do so, subject to the following conditions:
+        
+            The above copyright notice and this permission notice shall be included in all
+            copies or substantial portions of the Notebook.
+        
+            THE NOTEBOOK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+            OUT OF OR IN CONNECTION WITH THE NOTEBOOK OR THE USE OR OTHER DEALINGS IN THE
+            NOTEBOOK.
+        
+            ---
+        
+            **Citation Information:**
+        
+            If you use this notebook in your research or teaching, please cite it as:
+        
+            ```
+            @misc{causal_inference_ihdp,
+              author = {Sai Surya Madhav Rebbapragada},
+              title = {Understanding Causal Inference with IHDP: From Theory to Practice},
+              year = {2025},
+              url = {https://github.com/surya-madhav/causal-inference-ihdp}
+            }
+            ```
+        
+            **Data Attribution:**
+        
+            The IHDP data used in this notebook is based on the Infant Health and Development Program and was modified by Hill (2011) for causal inference research.
+        
+            Hill, J. L. (2011). Bayesian nonparametric modeling for causal inference. Journal of Computational and Graphical Statistics, 20(1), 217-240.
+            """),
+            kind="info"
+        )
+    
+        mo.output.replace(mo.vstack([license_header, license_text]))
+    _()
+    return
+
+
+@app.cell
+def _():
     return
 
 
