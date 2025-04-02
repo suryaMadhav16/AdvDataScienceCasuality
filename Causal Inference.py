@@ -3337,9 +3337,11 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, pd, plt):
+async def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, pd, plt):
+    import micropip
+    await micropip.install("econml")
     def _():
-
+    
         try:
             from econml.dml import CausalForestDML
             from sklearn.linear_model import LassoCV, LogisticRegression
@@ -3488,7 +3490,7 @@ def _(T_train, X_train_scaled, Y0_train, Y1_train, Y_train, mo, pd, plt):
                 )
             ]))
     _()
-    return
+    return (micropip,)
 
 
 @app.cell(hide_code=True)
