@@ -1,15 +1,17 @@
 import marimo
 
 __generated_with = "0.11.26"
-app = marimo.App(width="full", auto_download=["ipynb"])
+app = marimo.App(
+    width="full",
+    app_title="Causal Inference",
+    auto_download=["ipynb", "html"],
+)
 
 
 @app.cell(hide_code=True)
 def _():
     import marimo as mo
     from IPython.display import Image
-
-    # Display using marimo's display capabilities
     mo.as_html(Image(url="https://imgs.xkcd.com/comics/correlation_2x.png")).center()
     return Image, mo
 
@@ -778,17 +780,16 @@ def _(ihdp_data, mo):
 def _(ihdp_data, mo, pd):
     def _():
         m1 = mo.md("### 4.3 Column Types")
-    
+
         # Create intermediate dataframe
         dtype_df = pd.DataFrame({
             'Column': list(ihdp_data.dtypes.index),
             'Data Type': [str(x) for x in ihdp_data.dtypes.values]
         })
-    
+
         m2 = mo.ui.dataframe(dtype_df)
         mo.output.replace(mo.vstack([m1,m2]))
     _()
-
     return
 
 
@@ -2597,7 +2598,6 @@ def _(mo):
         t_learner_desc,
         x_learner_desc
     ])
-
     return s_learner_desc, t_learner_desc, x_learner_desc
 
 
@@ -3946,59 +3946,59 @@ def _():
 def _(mo):
     def _():
         subsection_header = mo.md("""### 8.4 Resources and References {#resources}""")
-    
+
         references = mo.md("""
         #### Key Books
-    
+
         1. Pearl, J. (2009). **Causality: Models, Reasoning, and Inference** (2nd ed.). Cambridge University Press. 
            [https://www.cambridge.org/core/books/causality/B0046844FAE10CBF274D4ACBDAEB5F5B](https://www.cambridge.org/core/books/causality/B0046844FAE10CBF274D4ACBDAEB5F5B)
-       
+
         2. Hernán, M. A., & Robins, J. M. (2020). **Causal Inference: What If**. Chapman & Hall/CRC.
            [https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/)
-       
+
         3. Peters, J., Janzing, D., & Schölkopf, B. (2017). **Elements of Causal Inference: Foundations and Learning Algorithms**. MIT Press.
            [https://library.oapen.org/bitstream/id/056a11be-ce3a-44b9-8987-a6c68fce8d9b/11283.pdf](https://library.oapen.org/bitstream/id/056a11be-ce3a-44b9-8987-a6c68fce8d9b/11283.pdf)
-       
+
         4. Imbens, G. W., & Rubin, D. B. (2015). **Causal Inference for Statistics, Social, and Biomedical Sciences**. Cambridge University Press.
            [https://www.cambridge.org/core/books/causal-inference-for-statistics-social-and-biomedical-sciences/71126BE90C58F1A431FE9B2DD07938AB](https://www.cambridge.org/core/books/causal-inference-for-statistics-social-and-biomedical-sciences/71126BE90C58F1A431FE9B2DD07938AB)
-       
+
         5. Cunningham, S. (2021). **Causal Inference: The Mixtape**. Yale University Press.
            [https://mixtape.scunning.com/](https://mixtape.scunning.com/)
-       
+
         6. Chernozhukov, V., et al. (2023). **Applied Causal Inference Powered by ML and AI**. 
            [https://www.artsci.com/acipma](https://www.artsci.com/acipma)
-     
+
         #### Research Articles and Papers
-    
+
         7. Zanga, A., Ozkirimli, E., & Stella, F. (2022). **A Survey on Causal Discovery: Theory and Practice**. International Journal of Approximate Reasoning.
            [https://www.sciencedirect.com/science/article/abs/pii/S0888613X22001402](https://www.sciencedirect.com/science/article/abs/pii/S0888613X22001402)
-       
+
         8. Pearl, J. (2010). **An Introduction to Causal Inference**. The International Journal of Biostatistics, 6(2).
            [https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2836213/](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2836213/)
-       
+
         9. Bongers, S., Forré, P., Peters, J., & Mooij, J. M. (2021). **Foundations of structural causal models with cycles and latent variables**. The Annals of Statistics, 49(5), 2885-2915.
-       
+
         10. Athey, S., & Imbens, G. (2019). **Machine learning methods that economists should know about**. Annual Review of Economics.
             [https://web.stanford.edu/~athey/papers/MLECTA.pdf](https://web.stanford.edu/~athey/papers/MLECTA.pdf)
-    
+
         #### Online Resources
-    
+
         11. Neal, B. (2023). **Which causal inference book you should read**.
             [https://www.bradyneal.com/which-causal-inference-book](https://www.bradyneal.com/which-causal-inference-book)
-        
+
         12. Pearl, J. **Causal Inference in Statistics: A Primer (Course Materials)**.
             [http://bayes.cs.ucla.edu/PRIMER/](http://bayes.cs.ucla.edu/PRIMER/)
-        
+
         13. **Introduction to Causal Inference (Course)** by Brady Neal.
             [https://www.bradyneal.com/causal-inference-course](https://www.bradyneal.com/causal-inference-course)
-        
+
         14. **DoWhy: A Python library for causal inference**.
             [https://microsoft.github.io/dowhy/](https://microsoft.github.io/dowhy/)
-        
+
         15. **EconML: A Python library for ML-based causal inference**.
             [https://github.com/microsoft/EconML](https://github.com/microsoft/EconML)
         """)
-    
+
         mo.output.replace(mo.vstack([subsection_header, references]))
     _()
     return
@@ -4008,25 +4008,25 @@ def _(mo):
 def _(mo):
     def _():
         license_header = mo.md("""### License {#license}""")
-    
+
         license_text = mo.callout(
             mo.md("""
             ## MIT License
-        
+
             **Understanding Causal Inference with IHDP: From Theory to Practice**
-        
+
             Copyright (c) 2025
-        
+
             Permission is hereby granted, free of charge, to any person obtaining a copy
             of this software and associated documentation files (the "Notebook"), to deal
             in the Notebook without restriction, including without limitation the rights
             to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
             copies of the Notebook, and to permit persons to whom the Notebook is
             furnished to do so, subject to the following conditions:
-        
+
             The above copyright notice and this permission notice shall be included in all
             copies or substantial portions of the Notebook.
-        
+
             THE NOTEBOOK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
             IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
             FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -4034,13 +4034,13 @@ def _(mo):
             LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
             OUT OF OR IN CONNECTION WITH THE NOTEBOOK OR THE USE OR OTHER DEALINGS IN THE
             NOTEBOOK.
-        
+
             ---
-        
+
             **Citation Information:**
-        
+
             If you use this notebook in your research or teaching, please cite it as:
-        
+
             ```
             @misc{causal_inference_ihdp,
               author = {Sai Surya Madhav Rebbapragada},
@@ -4049,16 +4049,16 @@ def _(mo):
               url = {https://github.com/surya-madhav/causal-inference-ihdp}
             }
             ```
-        
+
             **Data Attribution:**
-        
+
             The IHDP data used in this notebook is based on the Infant Health and Development Program and was modified by Hill (2011) for causal inference research.
-        
+
             Hill, J. L. (2011). Bayesian nonparametric modeling for causal inference. Journal of Computational and Graphical Statistics, 20(1), 217-240.
             """),
             kind="info"
         )
-    
+
         mo.output.replace(mo.vstack([license_header, license_text]))
     _()
     return
