@@ -41,7 +41,7 @@ jobs:
 
       # If you already have built WASM files, we just need to upload them
       - name: Upload build directory as artifact
-        uses: actions/upload-pages-artifact@v2
+        uses: actions/upload-pages-artifact@v4  # Updated from v2 to v4
         with:
           path: ./build
 
@@ -54,4 +54,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4  # Updated from v2 to v4
